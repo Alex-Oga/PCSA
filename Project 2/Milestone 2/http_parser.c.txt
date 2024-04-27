@@ -1,0 +1,74 @@
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <cstring>
+
+typedef struct {
+    char header_name[4096];
+    char header_value[4096];
+} Request_header;
+
+//HTTP Request Header
+typedef struct {
+    char http_version[50];
+    char http_method[50];
+    char http_uri[4096];
+    std::vector<Request_header> headers;
+} Request;
+
+void parse_request(const std::string& request_str, Request& request) {
+    // Split the request string by lines
+    size_t pos = 0, prev_pos = 0;
+    std::string line;
+    std::vector<std::string> lines;
+    while ((pos = request_str.find("\n", prev_pos)) != std::string::npos) {
+        line = request_str.substr(prev_pos, pos - prev_pos);
+        lines.push_back(line);
+        prev_pos = pos + 1;
+    }
+
+    // Parse request line
+    std::string request_line = lines[0];
+    sscanf(request_line.c_str(), "%s %s %s", request.http_method, request.http_uri, request.http_version);
+
+    // Parse headers
+    for (size_t i = 1; i < lines.size(); ++i) {
+        pos = lines[i].find(": ");
+        if (pos != std::string::npos) {
+            Request_header header;
+            strncpy(header.header_name, lines[i].substr(0, pos).c_str(), sizeof(header.header_name));
+            strncpy(header.header_value, lines[i].substr(pos + 2).c_str(), sizeof(header.header_value));
+            request.headers.push_back(header);
+        }
+    }
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 2) {
+        std::cerr << "Usage: " << argv[0] << " <request_file>" << std::endl;
+        return 1;
+    }
+
+    std::ifstream file(argv[1]); // Open file containing the HTTP request
+    if (!file.is_open()) {
+        std::cerr << "Error opening file." << std::endl;
+        return 1;
+    }
+
+    std::string request_str((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+    Request request;
+    parse_request(request_str, request);
+
+    // Display parsed request
+    std::cout << "HTTP Method: " << request.http_method << std::endl;
+    std::cout << "URI: " << request.http_uri << std::endl;
+    std::cout << "HTTP Version: " << request.http_version << std::endl;
+    std::cout << "Headers:" << std::endl;
+    for (const auto& header : request.headers) {
+        std::cout << header.header_name << ": " << header.header_value << std::endl;
+    }
+
+    return 0;
+}

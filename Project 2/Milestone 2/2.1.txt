@@ -1,0 +1,233 @@
+Thread Pool
+Work Queue
+No timer
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
+#include "pcsa_net.h"
+#include <functional>
+
+
+#define MAXLINE 8192
+#define MAXBUF 8192
+
+// Struct to hold HTTP request details
+typedef struct {
+    std::string method;
+    std::string uri;
+    std::string http_version;
+    std::vector<std::pair<std::string, std::string>> headers;
+} HTTPRequest;
+
+// Thread pool class
+class ThreadPool {
+public:
+    ThreadPool(size_t numThreads) : stop(false) {
+        for (size_t i = 0; i < numThreads; ++i) {
+            threads.emplace_back([this] {
+                while (true) {
+                    std::function<void()> task;
+                    {
+                        std::unique_lock<std::mutex> lock(queue_mutex);
+                        condition.wait(lock, [this] { return stop || !tasks.empty(); });
+                        if (stop && tasks.empty())
+                            return;
+                        task = std::move(tasks.front());
+                        tasks.pop_front();
+                    }
+                    task();
+                }
+            });
+        }
+    }
+
+    template<class F>
+    void enqueue(F&& f) {
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            tasks.emplace_back(std::forward<F>(f));
+        }
+        condition.notify_one();
+    }
+
+    ~ThreadPool() {
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            stop = true;
+        }
+        condition.notify_all();
+        for (std::thread& worker : threads)
+            worker.join();
+    }
+
+private:
+    std::vector<std::thread> threads;
+    std::deque<std::function<void()>> tasks;
+    std::mutex queue_mutex;
+    std::condition_variable condition;
+    bool stop;
+};
+
+// Parse HTTP request
+HTTPRequest parse_request(const std::string& request_str) {
+    HTTPRequest request;
+    std::istringstream iss(request_str);
+    std::string line;
+
+    // Parse request line
+    std::getline(iss, line);
+    std::istringstream iss_req(line);
+    iss_req >> request.method >> request.uri >> request.http_version;
+
+    // Parse headers
+    while (std::getline(iss, line) && !line.empty()) {
+        size_t pos = line.find(": ");
+        if (pos != std::string::npos) {
+            std::string header_name = line.substr(0, pos);
+            std::string header_value = line.substr(pos + 2);
+            request.headers.push_back(std::make_pair(header_name, header_value));
+        }
+    }
+
+    return request;
+}
+
+// Process GET request
+void process_get_request(int connfd, const std::string& root_folder, const std::string& uri) {
+    std::string filename = root_folder + uri;
+    std::ifstream file(filename, std::ios::binary);
+    std::ostringstream response;
+
+    if (file.good()) {
+        std::ostringstream file_contents;
+        file_contents << file.rdbuf();
+        std::string content = file_contents.str();
+
+        response << "HTTP/1.1 200 OK\r\n"
+                 << "Content-Length: " << content.size() << "\r\n"
+                 << "\r\n"
+                 << content;
+    } else {
+        response << "HTTP/1.1 404 Not Found\r\n"
+                 << "Content-Length: 0\r\n"
+                 << "\r\n";
+    }
+
+    write_all(connfd, response.str().c_str(), response.str().size());
+}
+
+// Process HEAD request
+void process_head_request(int connfd, const std::string& root_folder, const std::string& uri) {
+    std::string filename = root_folder + uri;
+    std::ifstream file(filename);
+    std::ostringstream response;
+
+    if (file.good()) {
+        response << "HTTP/1.1 200 OK\r\n"
+                 << "Content-Length: " << file.tellg() << "\r\n"
+                 << "\r\n";
+    } else {
+        response << "HTTP/1.1 404 Not Found\r\n"
+                 << "Content-Length: 0\r\n"
+                 << "\r\n";
+    }
+
+    write_all(connfd, response.str().c_str(), response.str().size());
+}
+
+// Main server function
+void run_server(const std::string& port, const std::string& root_folder, size_t numThreads) {
+    ThreadPool pool(numThreads);
+
+    int listenfd, connfd;
+    socklen_t clientlen;
+    struct sockaddr_storage clientaddr;
+    char client_hostname[MAXLINE], client_port[MAXLINE];
+    char buf[MAXLINE];
+    
+    listenfd = open_listenfd(const_cast<char*>(port.c_str()));
+    std::cout << "Server listening on port " << port << std::endl;
+
+    while (true) {
+        clientlen = sizeof(clientaddr);
+        connfd = accept(listenfd, (struct sockaddr*)&clientaddr, &clientlen);
+        getnameinfo((struct sockaddr*)&clientaddr, clientlen, client_hostname, MAXLINE, client_port, MAXLINE, 0);
+        std::cout << "Connected to client " << client_hostname << ":" << client_port << std::endl;
+
+        pool.enqueue([=] {
+            ssize_t n;
+            std::string request_str;
+            bool keep_alive = true;  // Flag to determine if the connection should be kept alive
+            
+            while (keep_alive) {
+                // Read the request
+                request_str.clear();
+                while ((n = read_line(connfd, const_cast<char*>(buf), MAXLINE)) > 0) {
+                    request_str.append(buf, n);
+                    if (request_str.find("\r\n\r\n") != std::string::npos) break; // End of request
+
+                    // Check if the request is for closing the connection
+                    if (request_str.find("Connection: close") != std::string::npos) {
+                        keep_alive = false;
+                    }
+                }
+
+                HTTPRequest request = parse_request(request_str);
+
+                if (request.method == "GET") {
+                    process_get_request(connfd, root_folder, request.uri);
+                } else if (request.method == "HEAD") {
+                    process_head_request(connfd, root_folder, request.uri);
+                } else {
+                    std::ostringstream response;
+                    response << "HTTP/1.1 501 Method Unimplemented\r\n"
+                             << "Content-Length: 0\r\n"
+                             << "\r\n";
+                    write_all(connfd, response.str().c_str(), response.str().size());
+                }
+
+                if (!keep_alive || n <= 0) {
+                    // Terminate the loop if the connection is not persistent or if no more data is available
+                    break;
+                }
+            }
+
+            close(connfd);
+        });
+    }
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 9 ||
+        std::string(argv[1]) != "--port" ||
+        std::string(argv[3]) != "--root" ||
+        std::string(argv[5]) != "--numThreads" ||
+        std::string(argv[7]) != "--timeout") {
+        std::cerr << "Usage: " << argv[0] << " --port <listenPort> --root <wwwRoot> --numThreads <numThreads> --timeout <timeout>" << std::endl;
+        return 1;
+    }
+
+    std::string port = argv[2];
+    std::string root_folder = argv[4];
+    size_t numThreads = std::stoi(argv[6]);
+    int timeout = std::stoi(argv[8]);
+
+    // Adjust timeout if necessary
+
+    run_server(port, root_folder, numThreads);
+
+    return 0;
+}
+
+                   

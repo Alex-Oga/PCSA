@@ -1,0 +1,600 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include "pcsa_net.h"
+
+#define MAXLINE 8192
+#define METHOD_GET "GET"
+#define METHOD_HEAD "HEAD"
+
+void handle_get_request(int connFd, const char *uri);
+void handle_head_request(int connFd, const char *uri);
+void handle_unimplemented_method(int connFd);
+
+int main(int argc, char **argv) {
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <port>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    int listenFd = open_listenfd(argv[1]);
+    if (listenFd < 0) {
+        fprintf(stderr, "Failed to listen on port %s\n", argv[1]);
+        exit(EXIT_FAILURE);
+    }
+
+    struct sockaddr_storage clientAddr;
+    socklen_t clientLen;
+    int connFd;
+
+    while (1) {
+        clientLen = sizeof(clientAddr);
+        connFd = accept(listenFd, (struct sockaddr *)&clientAddr, &clientLen);
+        if (connFd < 0) {
+            fprintf(stderr, "Failed to accept connection\n");
+            continue;
+        }
+
+        char buf[MAXLINE];
+        ssize_t n = read_line(connFd, buf, MAXLINE);
+        if (n <= 0) {
+            close(connFd);
+            continue;
+        }
+
+        // Parse request method and URI
+        char method[MAXLINE], uri[MAXLINE];
+        sscanf(buf, "%s %s", method, uri);
+
+        if (strcmp(method, METHOD_GET) == 0) {
+            handle_get_request(connFd, uri);
+        } else if (strcmp(method, METHOD_HEAD) == 0) {
+            handle_head_request(connFd, uri);
+        } else {
+            handle_unimplemented_method(connFd);
+        }
+
+        close(connFd);
+    }
+
+    return 0;
+}
+
+void handle_get_request(int connFd, const char *uri) {
+    FILE *file = fopen(uri + 1, "r"); // Skip the leading '/'
+    if (file == NULL) {
+        char response[MAXLINE];
+        snprintf(response, sizeof(response), "HTTP/1.1 404 Not Found\r\n\r\n");
+        write_all(connFd, response, strlen(response));
+        return;
+    }
+
+    char response[MAXLINE];
+    snprintf(response, sizeof(response), "HTTP/1.1 200 OK\r\n\r\n");
+    write_all(connFd, response, strlen(response));
+
+    char buf[MAXLINE];
+    while (fgets(buf, MAXLINE, file) != NULL) {
+        write_all(connFd, buf, strlen(buf));
+    }
+
+    fclose(file);
+}
+
+void handle_head_request(int connFd, const char *uri) {
+    FILE *file = fopen(uri + 1, "r"); // Skip the leading '/'
+    if (file == NULL) {
+        char response[MAXLINE];
+        snprintf(response, sizeof(response), "HTTP/1.1 404 Not Found\r\n\r\n");
+        write_all(connFd, response, strlen(response));
+        return;
+    }
+
+    char response[MAXLINE];
+    snprintf(response, sizeof(response), "HTTP/1.1 200 OK\r\n\r\n");
+    write_all(connFd, response, strlen(response));
+
+    fclose(file);
+}
+
+void handle_unimplemented_method(int connFd) {
+    char response[MAXLINE];
+    snprintf(response, sizeof(response), "HTTP/1.1 501 Method Unimplemented\r\n\r\n");
+    write_all(connFd, response, strlen(response));
+}
+
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include "pcsa_net.h"
+
+#define MAXLINE 8192
+#define MAXBUF 8192
+
+// Struct to hold HTTP request details
+typedef struct {
+    std::string method;
+    std::string uri;
+    std::string http_version;
+    std::vector<std::pair<std::string, std::string>> headers;
+} HTTPRequest;
+
+// Parse HTTP request
+HTTPRequest parse_request(const std::string& request_str) {
+    HTTPRequest request;
+    std::istringstream iss(request_str);
+    std::string line;
+
+    // Parse request line
+    std::getline(iss, line);
+    std::istringstream iss_req(line);
+    iss_req >> request.method >> request.uri >> request.http_version;
+
+    // Parse headers
+    while (std::getline(iss, line) && !line.empty()) {
+        size_t pos = line.find(": ");
+        if (pos != std::string::npos) {
+            std::string header_name = line.substr(0, pos);
+            std::string header_value = line.substr(pos + 2);
+            request.headers.push_back(std::make_pair(header_name, header_value));
+        }
+    }
+
+    return request;
+}
+
+// Process GET request
+void process_get_request(int connfd, const std::string& root_folder, const std::string& uri) {
+    std::string filename = root_folder + uri;
+    std::ifstream file(filename, std::ios::binary);
+    std::ostringstream response;
+
+    if (file.good()) {
+        std::ostringstream file_contents;
+        file_contents << file.rdbuf();
+        std::string content = file_contents.str();
+
+        response << "HTTP/1.1 200 OK\r\n"
+                 << "Content-Length: " << content.size() << "\r\n"
+                 << "\r\n"
+                 << content;
+    } else {
+        response << "HTTP/1.1 404 Not Found\r\n"
+                 << "Content-Length: 0\r\n"
+                 << "\r\n";
+    }
+
+    write_all(connfd, response.str().c_str(), response.str().size());
+}
+
+// Process HEAD request
+void process_head_request(int connfd, const std::string& root_folder, const std::string& uri) {
+    std::string filename = root_folder + uri;
+    std::ifstream file(filename);
+    std::ostringstream response;
+
+    if (file.good()) {
+        response << "HTTP/1.1 200 OK\r\n"
+                 << "Content-Length: " << file.tellg() << "\r\n"
+                 << "\r\n";
+    } else {
+        response << "HTTP/1.1 404 Not Found\r\n"
+                 << "Content-Length: 0\r\n"
+                 << "\r\n";
+    }
+
+    write_all(connfd, response.str().c_str(), response.str().size());
+}
+
+// Main server function
+void run_server(const std::string& port, const std::string& root_folder) {
+    int listenfd, connfd;
+    socklen_t clientlen;
+    struct sockaddr_storage clientaddr;
+    char client_hostname[MAXLINE], client_port[MAXLINE];
+    char buf[MAXLINE];
+    
+    listenfd = open_listenfd(const_cast<char*>(port.c_str()));
+    std::cout << "Server listening on port " << port << std::endl;
+
+    while (1) {
+        clientlen = sizeof(clientaddr);
+        connfd = accept(listenfd, (struct sockaddr*)&clientaddr, &clientlen);
+        getnameinfo((struct sockaddr*)&clientaddr, clientlen, client_hostname, MAXLINE, client_port, MAXLINE, 0);
+        std::cout << "Connected to client " << client_hostname << ":" << client_port << std::endl;
+
+        ssize_t n;
+        std::string request_str;
+        while ((n = read_line(connfd, buf, MAXLINE)) > 0) {
+            request_str.append(buf, n);
+            if (request_str.find("\r\n\r\n") != std::string::npos) break; // End of request
+        }
+
+        HTTPRequest request = parse_request(request_str);
+
+        if (request.method == "GET") {
+            process_get_request(connfd, root_folder, request.uri);
+        } else if (request.method == "HEAD") {
+            process_head_request(connfd, root_folder, request.uri);
+        } else {
+            std::ostringstream response;
+            response << "HTTP/1.1 501 Method Unimplemented\r\n"
+                     << "Content-Length: 0\r\n"
+                     << "\r\n";
+            write_all(connfd, response.str().c_str(), response.str().size());
+        }
+
+        close(connfd);
+    }
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 5 || std::string(argv[1]) != "--port" || std::string(argv[3]) != "--root") {
+        std::cerr << "Usage: " << argv[0] << " --port <listenPort> --root <wwwRoot>" << std::endl;
+        return 1;
+    }
+
+    std::string port = argv[2];
+    std::string root_folder = argv[4];
+
+    run_server(port, root_folder);
+
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----------------------------------------------------------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include "pcsa_net.h"
+
+#define MAXLINE 8192
+#define MAXBUF 8192
+
+void handle_request(int connfd, char *wwwRoot);
+
+int main(int argc, char **argv) {
+    int listenfd, connfd, port;
+    socklen_t clientlen;
+    struct sockaddr_storage clientaddr;
+    char client_hostname[MAXLINE], client_port[MAXLINE];
+    char wwwRoot[MAXLINE];
+
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <port> <wwwRoot>\n", argv[0]);
+        exit(1);
+    }
+
+    port = atoi(argv[1]);
+    strcpy(wwwRoot, argv[2]);
+
+    listenfd = open_listenfd(argv[1]);
+    if (listenfd < 0) {
+        fprintf(stderr, "Error: Failed to open listen socket on port %s\n", argv[1]);
+        exit(1);
+    }
+
+    while (1) {
+        clientlen = sizeof(struct sockaddr_storage);
+        connfd = accept(listenfd, (struct sockaddr *)&clientaddr, &clientlen);
+        getnameinfo((struct sockaddr *)&clientaddr, clientlen, client_hostname, MAXLINE, client_port, MAXLINE, 0);
+        printf("Connected to (%s, %s)\n", client_hostname, client_port);
+
+        handle_request(connfd, wwwRoot);
+
+        close(connfd);
+    }
+
+    return 0;
+}
+
+void handle_request(int connfd, char *wwwRoot) {
+    char buf[MAXBUF], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
+
+    if (read_line(connfd, buf, MAXBUF) <= 0) {
+        fprintf(stderr, "Error: Failed to read request\n");
+        return;
+    }
+
+    sscanf(buf, "%s %s %s", method, uri, version);
+
+    if (strcmp(method, "GET") == 0) {
+        // Handle GET request
+        // Construct full path
+        char filepath[MAXLINE];
+        snprintf(filepath, sizeof(filepath), "%s%s", wwwRoot, uri);
+        
+        FILE *file = fopen(filepath, "r");
+        if (file) {
+            // File exists, send response
+            char response[MAXBUF];
+            sprintf(response, "%s 200 OK\r\n\r\n", version);
+            write_all(connfd, response, strlen(response));
+
+            // Send file contents
+            char filebuf[MAXBUF];
+            size_t nread;
+            while ((nread = fread(filebuf, 1, sizeof(filebuf), file)) > 0) {
+                write_all(connfd, filebuf, nread);
+            }
+
+            fclose(file);
+        } else {
+            // File not found, send 404 response
+            char response[MAXBUF];
+            sprintf(response, "%s 404 Not Found\r\n\r\n", version);
+            write_all(connfd, response, strlen(response));
+        }
+    } else if (strcmp(method, "HEAD") == 0) {
+        // Handle HEAD request
+        // Construct full path
+        char filepath[MAXLINE];
+        snprintf(filepath, sizeof(filepath), "%s%s", wwwRoot, uri);
+
+        FILE *file = fopen(filepath, "r");
+        if (file) {
+            // File exists, send response
+            char response[MAXBUF];
+            sprintf(response, "%s 200 OK\r\n\r\n", version);
+            write_all(connfd, response, strlen(response));
+            fclose(file);
+        } else {
+            // File not found, send 404 response
+            char response[MAXBUF];
+            sprintf(response, "%s 404 Not Found\r\n\r\n", version);
+            write_all(connfd, response, strlen(response));
+        }
+    } else {
+        // Unsupported method, send 501 response
+        char response[MAXBUF];
+        sprintf(response, "%s 501 Method Unimplemented\r\n\r\n", version);
+        write_all(connfd, response, strlen(response));
+    }
+}
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include "pcsa_net.h"
+
+#define MAXLINE 8192
+#define MAXBUF 8192
+
+// Struct to hold HTTP request details
+typedef struct {
+    std::string method;
+    std::string uri;
+    std::string http_version;
+    std::vector<std::pair<std::string, std::string>> headers;
+} HTTPRequest;
+
+// Parse HTTP request
+HTTPRequest parse_request(const std::string& request_str) {
+    HTTPRequest request;
+    std::istringstream iss(request_str);
+    std::string line;
+
+    // Parse request line
+    std::getline(iss, line);
+    std::istringstream iss_req(line);
+    iss_req >> request.method >> request.uri >> request.http_version;
+
+    // Parse headers
+    while (std::getline(iss, line) && !line.empty()) {
+        size_t pos = line.find(": ");
+        if (pos != std::string::npos) {
+            std::string header_name = line.substr(0, pos);
+            std::string header_value = line.substr(pos + 2);
+            request.headers.push_back(std::make_pair(header_name, header_value));
+        }
+    }
+
+    return request;
+}
+
+// Process GET request
+void process_get_request(int connfd, const std::string& root_folder, const std::string& uri) {
+    std::string filename = root_folder + uri;
+    std::ifstream file(filename, std::ios::binary);
+    std::ostringstream response;
+
+    if (file.good()) {
+        std::ostringstream file_contents;
+        file_contents << file.rdbuf();
+        std::string content = file_contents.str();
+
+        response << "HTTP/1.1 200 OK\r\n"
+                 << "Content-Length: " << content.size() << "\r\n"
+                 << "\r\n"
+                 << content;
+    } else {
+        response << "HTTP/1.1 404 Not Found\r\n"
+                 << "Content-Length: 0\r\n"
+                 << "\r\n";
+    }
+
+    write_all(connfd, response.str().c_str(), response.str().size());
+}
+
+// Process HEAD request
+void process_head_request(int connfd, const std::string& root_folder, const std::string& uri) {
+    std::string filename = root_folder + uri;
+    std::ifstream file(filename);
+    std::ostringstream response;
+
+    if (file.good()) {
+        response << "HTTP/1.1 200 OK\r\n"
+                 << "Content-Length: " << file.tellg() << "\r\n"
+                 << "\r\n";
+    } else {
+        response << "HTTP/1.1 404 Not Found\r\n"
+                 << "Content-Length: 0\r\n"
+                 << "\r\n";
+    }
+
+    write_all(connfd, response.str().c_str(), response.str().size());
+}
+
+// Main server function
+void run_server(const std::string& port, const std::string& root_folder) {
+    int listenfd, connfd;
+    socklen_t clientlen;
+    struct sockaddr_storage clientaddr;
+    char client_hostname[MAXLINE], client_port[MAXLINE];
+    char buf[MAXLINE];
+    
+    listenfd = open_listenfd(const_cast<char*>(port.c_str()));
+    std::cout << "Server listening on port " << port << std::endl;
+
+    while (1) {
+        clientlen = sizeof(clientaddr);
+        connfd = accept(listenfd, (struct sockaddr*)&clientaddr, &clientlen);
+        getnameinfo((struct sockaddr*)&clientaddr, clientlen, client_hostname, MAXLINE, client_port, MAXLINE, 0);
+        std::cout << "Connected to client " << client_hostname << ":" << client_port << std::endl;
+
+        ssize_t n;
+        std::string request_str;
+        while ((n = read_line(connfd, buf, MAXLINE)) > 0) {
+            request_str.append(buf, n);
+            if (request_str.find("\r\n\r\n") != std::string::npos) break; // End of request
+        }
+
+        HTTPRequest request = parse_request(request_str);
+
+        if (request.method == "GET") {
+            process_get_request(connfd, root_folder, request.uri);
+        } else if (request.method == "HEAD") {
+            process_head_request(connfd, root_folder, request.uri);
+        } else {
+            std::ostringstream response;
+            response << "HTTP/1.1 501 Method Unimplemented\r\n"
+                     << "Content-Length: 0\r\n"
+                     << "\r\n";
+            write_all(connfd, response.str().c_str(), response.str().size());
+        }
+
+        close(connfd);
+    }
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 5 || std::string(argv[1]) != "--port" || std::string(argv[3]) != "--root") {
+        std::cerr << "Usage: " << argv[0] << " --port <listenPort> --root <wwwRoot>" << std::endl;
+        return 1;
+    }
+
+    std::string port = argv[2];
+    std::string root_folder = argv[4];
+
+    run_server(port, root_folder);
+
+    return 0;
+}
+
+
+-----------------------------------------------------------------------------------------
+
+./m1 --port 8080 --root samples 
+
+./m2 --port 8080 --root samples --numThreads 3 --timeout 20
+
+./icws --port 8080 --root samples --numThreads 3 --timeout 20 --cgiHandler hello.py
+
+GET /index.html HTTP/1.1
+Host: localhost:8080
+Connection: close
+
+GET /index.html HTTP/1.1
+Host: localhost:8080
+Connection: keep-alive
+
+HEAD /index.html HTTP/1.1
+Host: localhost:8080
+Connection: close
+
+HEAD /index.html HTTP/1.1
+Host: localhost:8080
+Connection: keep-alive
+
+HEAD /cat.jpg HTTP/1.1
+Host: localhost:8080
+Connection: close
+
+HEAD /cat.jpg HTTP/1.1
+Host: localhost:8080
+Connection: keep-alive
+
+GET /cat.jpg HTTP/1.1
+Host: localhost:8080
+Connection: close
+
+GET /cat.jpg HTTP/1.1
+Host: localhost:8080
+Connection: keep-alive
+
+GET /nice.jpg HTTP/1.1
+Host: localhost:8080
+Connection: keep-alive
+
+GET /nice.jpg HTTP/3.1
+Host: localhost:8080
+Connection: keep-alive
+
+curl -k http://localhost:8080/index.html
+
+for i in {1..10}; do curl http://localhost:8080/samples/index.html & done
+
+for i in {1..10}; do curl -X GET http://localhost:8080/samples/cat.jpg -s & done
+
+curl -k -Iv http://localhost:8080 --next http://localhost:8080 2>&1 | grep -i '#0'
+
+http://localhost:8080/cgi/?text=hello
+
+http://localhost:8080/cgi/index.html
+
+localhost:8080/cgi/dumper.py
+
+ab -c 10 -n 20 -t 60 http://localhost:8080/index.html
+

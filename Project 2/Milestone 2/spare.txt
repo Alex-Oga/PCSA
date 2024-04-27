@@ -1,0 +1,274 @@
+Able to accept persistent and non persistent requests
+Unknown threads/work queue
+No timeout
+
+#include <mutex>
+#include <condition_variable>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <pthread.h>
+#include <deque>
+#include <thread>
+#include <poll.h>
+#include <chrono>
+#include "pcsa_net.h"
+
+#define MAXLINE 8192
+#define MAXBUF 8192
+
+// Struct to hold HTTP request details
+typedef struct {
+    std::string method;
+    std::string uri;
+    std::string http_version;
+    std::vector<std::pair<std::string, std::string>> headers;
+} HTTPRequest;
+
+// Struct to hold information about each connection
+typedef struct {
+    int connfd;
+    std::chrono::time_point<std::chrono::system_clock> last_activity;
+} ConnectionInfo;
+
+// Global variables
+std::deque<ConnectionInfo> work_queue;
+std::vector<std::thread> thread_pool;
+
+// Mutex and condition variable for thread synchronization
+std::mutex queue_mutex;
+std::condition_variable queue_cv;
+
+// Function prototypes
+void* worker_thread(void* arg);
+void process_get_request(int connfd, const std::string& root_folder, const std::string& uri);
+void process_head_request(int connfd, const std::string& root_folder, const std::string& uri);
+void add_connection(int connfd);
+void remove_inactive_connections(int timeout_seconds);
+
+// Parse HTTP request
+HTTPRequest parse_request(const std::string& request_str) {
+    HTTPRequest request;
+    std::istringstream iss(request_str);
+    std::string line;
+
+    // Parse request line
+    std::getline(iss, line);
+    std::istringstream iss_req(line);
+    iss_req >> request.method >> request.uri >> request.http_version;
+
+    // Parse headers
+    while (std::getline(iss, line) && !line.empty()) {
+        size_t pos = line.find(": ");
+        if (pos != std::string::npos) {
+            std::string header_name = line.substr(0, pos);
+            std::string header_value = line.substr(pos + 2);
+            request.headers.push_back(std::make_pair(header_name, header_value));
+        }
+    }
+
+    return request;
+}
+
+// Process GET request
+void process_get_request(int connfd, const std::string& root_folder, const std::string& uri) {
+    std::string filename = root_folder + uri; // Use the provided URI
+    std::ifstream file(filename, std::ios::binary);
+    std::ostringstream response;
+
+    if (file.good()) {
+        std::ostringstream file_contents;
+        file_contents << file.rdbuf();
+        std::string content = file_contents.str();
+
+        response << "HTTP/1.1 200 OK\r\n"
+                 << "Content-Length: " << content.size() << "\r\n"
+                 << "\r\n"
+                 << content;
+    } else {
+        response << "HTTP/1.1 404 Not Found\r\n"
+                 << "Content-Length: 0\r\n"
+                 << "\r\n";
+    }
+
+    write(connfd, response.str().c_str(), response.str().size());
+}
+
+// Process HEAD request
+void process_head_request(int connfd, const std::string& root_folder, const std::string& uri) {
+    std::string filename = root_folder + uri; // Use the provided URI
+    std::ifstream file(filename);
+    std::ostringstream response;
+
+    if (file.good()) {
+        // Determine content length without reading the file
+        file.seekg(0, std::ios::end);
+        std::streampos content_length = file.tellg();
+
+        response << "HTTP/1.1 200 OK\r\n"
+                 << "Content-Length: " << content_length << "\r\n"
+                 << "\r\n";
+    } else {
+        response << "HTTP/1.1 404 Not Found\r\n"
+                 << "Content-Length: 0\r\n"
+                 << "\r\n";
+    }
+
+    write(connfd, response.str().c_str(), response.str().size());
+}
+
+
+// Worker thread function
+void* worker_thread(void* arg, const std::string& root_folder) {
+    while (true) {
+        ConnectionInfo conn_info;
+
+        // Wait for a connection to be added to the queue
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            queue_cv.wait(lock, []{ return !work_queue.empty(); });
+
+            // Get the connection from the queue
+            conn_info = work_queue.front();
+            work_queue.pop_front();
+        }
+
+        // Update last activity time
+        conn_info.last_activity = std::chrono::system_clock::now();
+
+        // Process the connection based on the HTTP method
+        std::string request_str;
+        char buf[MAXLINE];
+        ssize_t n;
+        bool keep_alive = true;
+
+        while (keep_alive) {
+            // Read the request
+            request_str.clear();
+            while ((n = read(conn_info.connfd, buf, MAXLINE)) > 0) {
+                request_str.append(buf, n);
+                if (request_str.find("\r\n\r\n") != std::string::npos) break; // End of request
+
+                // Check if the request is for closing the connection
+                if (request_str.find("Connection: close") != std::string::npos) {
+                    keep_alive = false;
+                }
+            }
+
+            if (n <= 0) {
+                // No more data available or error occurred
+                keep_alive = false;
+            } else {
+                // Parse the HTTP request
+                HTTPRequest request = parse_request(request_str);
+
+                // Process the request
+                if (request.method == "GET") {
+    process_get_request(conn_info.connfd, root_folder, request.uri);
+} else if (request.method == "HEAD") {
+    process_head_request(conn_info.connfd, root_folder, request.uri);
+} else {
+                    // Unsupported method
+                    std::ostringstream response;
+                    response << "HTTP/1.1 501 Method Unimplemented\r\n"
+                             << "Content-Length: 0\r\n"
+                             << "\r\n";
+                    write(conn_info.connfd, response.str().c_str(), response.str().size());
+                }
+            }
+        }
+
+        // Close the connection
+        close(conn_info.connfd);
+    }
+    return nullptr;
+}
+
+// Add a connection to the work queue
+void add_connection(int connfd) {
+    ConnectionInfo conn_info;
+    conn_info.connfd = connfd;
+    conn_info.last_activity = std::chrono::system_clock::now();
+
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        work_queue.push_back(conn_info);
+    }
+
+    queue_cv.notify_one();
+}
+
+// Remove inactive connections from the work queue
+void remove_inactive_connections(int timeout_seconds) {
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(timeout_seconds));
+
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        auto current_time = std::chrono::system_clock::now();
+
+        // Iterate through the queue and remove inactive connections
+        for (auto it = work_queue.begin(); it != work_queue.end();) {
+            if (std::chrono::duration_cast<std::chrono::seconds>(current_time - it->last_activity).count() >= timeout_seconds) {
+                close(it->connfd);
+                it = work_queue.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+}
+
+// Main server function
+void run_server(const std::string& port, const std::string& root_folder, int num_threads, int timeout_seconds) {
+    int listenfd, connfd;
+    socklen_t clientlen;
+    struct sockaddr_storage clientaddr;
+    char client_hostname[MAXLINE], client_port[MAXLINE];
+    char buf[MAXLINE];
+
+    // Create thread pool
+    for (int i = 0; i < num_threads; ++i) {
+    thread_pool.emplace_back([&root_folder](){ worker_thread(nullptr, root_folder); });
+}
+
+    // Start thread to remove inactive connections
+    std::thread cleanup_thread(remove_inactive_connections, timeout_seconds);
+
+    listenfd = open_listenfd(const_cast<char*>(port.c_str()));
+    std::cout << "Server listening on port " << port << std::endl;
+
+    while (true) {
+        clientlen = sizeof(clientaddr);
+        connfd = accept(listenfd, (struct sockaddr*)&clientaddr, &clientlen);
+        getnameinfo((struct sockaddr*)&clientaddr, clientlen, client_hostname, MAXLINE, client_port, MAXLINE, 0);
+        std::cout << "Connected to client " << client_hostname << ":" << client_port << std::endl;
+
+        // Add connection to the work queue
+        add_connection(connfd);
+    }
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 9 || std::string(argv[1]) != "--port" || std::string(argv[3]) != "--root" || std::string(argv[5]) != "--numThreads" || std::string(argv[7]) != "--timeout") {
+        std::cerr << "Usage: " << argv[0] << " --port <listenPort> --root <wwwRoot> --numThreads <numThreads> --timeout <timeout>" << std::endl;
+        return 1;
+    }
+
+    std::string port = argv[2];
+    std::string root_folder = argv[4];
+    int num_threads = std::stoi(argv[6]);
+    int timeout_seconds = std::stoi(argv[8]);
+
+    run_server(port, root_folder, num_threads, timeout_seconds);
+
+    return 0;
+}
+
+---------------------------------------------------------------------------------------------------------------
+

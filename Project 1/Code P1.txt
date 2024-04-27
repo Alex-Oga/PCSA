@@ -1,0 +1,3665 @@
+#include "stdio.h"
+
+#define MAX_CMD_BUFFER 255
+
+int main() {
+    char buffer[MAX_CMD_BUFFER];
+    while (1) {
+        printf("icsh $ ");
+        fgets(buffer, 255, stdin);
+        printf("you said: %s\n", buffer);
+    }
+}
+
+
+
+#include <iostream>
+
+int main() {
+    std::cout << "icsh $ ";
+
+    return 0;
+}
+
+#include <iostream>
+#include <string>
+
+int main() {
+    std::string x;
+    while(1) {
+        std::cout << "\nicsh $ ";
+        std::cin >> x;
+        std::cout << x;
+    }
+
+    return 0;
+}
+
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+    string x;
+    while(1) {
+        cout << "icsh $ ";
+        cin >> x;
+        cout << x;
+    }
+
+    return 0;
+}
+
+
+
+#include <iostream>
+#include <cstring>
+#include <string.h>
+#include <stdio.h>
+
+using namespace std;
+
+int main()
+{
+    string x;
+    while(1) {
+        cout << "icsh $ ";
+        getline(cin, x);
+        char *str = new char[x.length() + 1];
+        strcpy(str, x.c_str());
+        char *token = strtok(str, " ");
+        while (token != nullptr) {
+            cout << token << endl;
+            token = strtok(nullptr, " ");
+        }
+        
+    }
+
+    return 0;
+}
+
+#include <iostream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <unistd.h>
+#include <sys/wait.h>
+
+using namespace std;
+
+void execArg(char* arr[]) {
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        cerr << "Fork failed" << endl;
+        return;
+    } else if (pid == 0) {
+        int status_code = execvp(arr[0], arr);
+        if (status_code <= 0) {
+            cerr << "Bad command" << endl;
+        }
+        exit(0);
+    } else {
+        wait(NULL);
+        return;
+    }
+}
+
+int main() {
+    const int maxTokens = 10;
+    while(1) {
+        string input;
+        cout << "icsh $ ";
+        getline(cin, input);
+        istringstream iss(input);
+        vector<string> tokens;
+        string token;
+        while (iss >> token) {
+            tokens.push_back(token);
+        }
+        const int numTokens = tokens.size();
+        char* args[maxTokens + 1];
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            args[i] = new char[tokens[i].size() + 1];
+            strcpy(args[i], tokens[i].c_str());
+        }
+        args[numTokens] = nullptr;
+        
+        if (strcmp(args[0], "exit") == 0) { // Check for exit
+            int exitCode = (numTokens > 1) ? atoi(args[1]) : 0;
+            
+            for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+                delete[] args[i];
+            }
+
+            exit(exitCode);
+        }
+        
+        else if(strcmp(args[0], "!!") == 0) {
+        
+        }
+        
+        //execvp(args[0], args); // Execute command
+        
+        execArg(args);
+    }
+
+    return 0;
+}
+
+
+
+#include <iostream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/wait.h>
+
+using namespace std;
+
+string input; 
+
+const int maxTokens = 10; 
+char* lastExecutedArgs[maxTokens + 1];
+
+void execArg(char* arr[]);
+void execDoubleBang(char* arr[]);
+void copyLastExecutedArgs(char* source[], char* destination[]);
+
+int main() {
+    while (1) {
+        cout << "icsh $ ";
+        getline(cin, input);
+        
+        if (input.empty()) {
+            continue;
+        }
+
+        istringstream iss(input);
+        vector<string> tokens;
+
+        string token;
+        while (iss >> token) {
+            tokens.push_back(token);
+        }
+
+        const int numTokens = tokens.size();
+        char* args[maxTokens + 1];  
+
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            args[i] = new char[tokens[i].size() + 1];
+            strcpy(args[i], tokens[i].c_str());
+        }
+
+        args[numTokens] = nullptr;
+
+        if (strcmp(args[0], "exit") == 0) {
+            int exitCode = (numTokens > 1) ? atoi(args[1]) : 0;
+
+            for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+                delete[] args[i];
+            }
+
+            exit(exitCode);  
+        }
+        
+        else if (strcmp(args[0], "!!") == 0) {
+            execDoubleBang(lastExecutedArgs);
+        }
+        
+        else {
+            execArg(args);
+        }
+
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            delete[] args[i];
+        }
+    }
+
+    return 0;
+}
+
+
+void execArg(char* arr[]) {
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        cerr << "Fork failed" << endl;
+        return;
+    } else if (pid == 0) {
+        int status_code = execvp(arr[0], arr);
+        if (status_code == -1) {
+            perror("Bad Command");
+        }
+        exit(status_code);
+    } else {
+        wait(NULL);
+
+        copyLastExecutedArgs(arr, lastExecutedArgs);
+
+        return;
+    }
+}
+
+void execDoubleBang(char* arr[]) {
+    pid_t pid = fork();
+    if (pid == -1) {
+        cerr << "Fork failed" << endl;
+        return;
+    } else if (pid == 0) {
+        int status_code = execvp(arr[0], arr);
+        if (status_code == -1) {
+            perror("Bad Command");
+        }
+        exit(0);
+    } else {
+        wait(NULL);
+
+        return;
+    }
+}
+
+void copyLastExecutedArgs(char* source[], char* destination[]) {
+    for (int i = 0; i < maxTokens + 1; ++i) {
+        if (source[i] != nullptr) {
+            destination[i] = new char[strlen(source[i]) + 1];
+            strcpy(destination[i], source[i]);
+        } else {
+            destination[i] = nullptr;
+        }
+    }
+}
+
+
+-----------------------------------------
+
+int main(int argc, char *argv[]) {
+    if (argc > 1) {
+        cout << "nice";
+    }
+    else {
+        while (1) {
+        cout << "icsh $ ";
+        getline(cin, input);
+        
+        if (input.empty()) {
+            continue;
+        }
+
+        istringstream iss(input);
+        vector<string> tokens;
+
+        string token;
+        while (iss >> token) {
+            tokens.push_back(token);
+        }
+
+        const int numTokens = tokens.size();
+        char* args[maxTokens + 1];  
+
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            args[i] = new char[tokens[i].size() + 1];
+            strcpy(args[i], tokens[i].c_str());
+        }
+
+        args[numTokens] = nullptr;
+
+        if (strcmp(args[0], "exit") == 0) {
+            int exitCode = (numTokens > 1) ? atoi(args[1]) : 0;
+
+            for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+                delete[] args[i];
+            }
+
+            exit(exitCode);  
+        }
+        
+        else if (strcmp(args[0], "!!") == 0) {
+            execDoubleBang(lastExecutedArgs);
+        }
+        
+        else {
+            execArg(args);
+        }
+
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            delete[] args[i];
+        }
+    }
+    return 0;
+    }
+}
+
+
+void execArg(char* arr[]) {
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        cerr << "Fork failed" << endl;
+        return;
+    } else if (pid == 0) {
+        int status_code = execvp(arr[0], arr);
+        if (status_code == -1) {
+            perror("Bad Command");
+        }
+        exit(status_code);
+    } else {
+        wait(NULL);
+
+        copyLastExecutedArgs(arr, lastExecutedArgs);
+
+        return;
+    }
+}
+
+
+
+-----------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/wait.h>
+
+using namespace std;
+
+string input; 
+ifstream scriptFile;
+
+const int maxTokens = 10; 
+char* lastExecutedArgs[maxTokens + 1];
+
+void execArg(char* arr[]);
+void execDoubleBang(char* arr[]);
+void copyLastExecutedArgs(char* source[], char* destination[]);
+
+void mainLoop();
+
+int main(int argc, char* argv[]) {
+    
+    if (argc > 1) {
+        
+    }
+    else {
+        mainLoop();
+    }
+    
+    return 0;
+}
+
+void mainLoop() {
+    while (1) {
+        cout << "icsh $ ";
+        getline(cin, input);
+        
+        if (input.empty()) {
+            continue;
+        }
+
+        istringstream iss(input);
+        vector<string> tokens;
+
+        string token;
+        while (iss >> token) {
+            tokens.push_back(token);
+        }
+
+        const int numTokens = tokens.size();
+        char* args[maxTokens + 1];  
+
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            args[i] = new char[tokens[i].size() + 1];
+            strcpy(args[i], tokens[i].c_str());
+        }
+
+        args[numTokens] = nullptr;
+
+        if (strcmp(args[0], "exit") == 0) {
+            int exitCode = (numTokens > 1) ? atoi(args[1]) : 0;
+
+            for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+                delete[] args[i];
+            }
+
+            exit(exitCode);  
+        }
+        
+        else if (strcmp(args[0], "!!") == 0) {
+            execDoubleBang(lastExecutedArgs);
+        }
+        
+        else {
+            execArg(args);
+        }
+
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            delete[] args[i];
+        }
+    }
+}
+
+
+void execArg(char* arr[]) {
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        cerr << "Fork failed" << endl;
+        return;
+    } else if (pid == 0) {
+        int status_code = execvp(arr[0], arr);
+        if (status_code == -1) {
+            perror("Bad Command");
+        }
+        exit(status_code);
+    } else {
+        wait(NULL);
+
+        copyLastExecutedArgs(arr, lastExecutedArgs);
+
+        return;
+    }
+}
+
+void execDoubleBang(char* arr[]) {
+    pid_t pid = fork();
+    if (pid == -1) {
+        cerr << "Fork failed" << endl;
+        return;
+    } else if (pid == 0) {
+        int status_code = execvp(arr[0], arr);
+        if (status_code == -1) {
+            perror("Bad Command");
+        }
+        exit(0);
+    } else {
+        wait(NULL);
+
+        return;
+    }
+}
+
+void copyLastExecutedArgs(char* source[], char* destination[]) {
+    for (int i = 0; i < maxTokens + 1; ++i) {
+        if (source[i] != nullptr) {
+            destination[i] = new char[strlen(source[i]) + 1];
+            strcpy(destination[i], source[i]);
+        } else {
+            destination[i] = nullptr;
+        }
+    }
+}
+
+
+-----------------------------------------------------------------------------------------------------------
+
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/wait.h>
+
+using namespace std;
+
+string input; 
+
+
+const int maxTokens = 10; 
+char* lastExecutedArgs[maxTokens + 1];
+
+void execArg(char* arr[]);
+void execDoubleBang(char* arr[]);
+void copyLastExecutedArgs(char* source[], char* destination[]);
+
+void mainLoop();
+
+int main(int argc, char* argv[]) {
+    
+    if (argc > 1) {
+        
+    }
+    
+    else {
+        mainLoop();
+    }
+    
+    return 0;
+}
+
+void mainLoop() {
+    while (1) {
+        cout << "icsh $ ";
+        getline(cin, input);
+        
+        if (input.empty()) {
+            continue;
+        }
+
+        istringstream iss(input);
+        vector<string> tokens;
+
+        string token;
+        while (iss >> token) {
+            tokens.push_back(token);
+        }
+
+        const int numTokens = tokens.size();
+        char* args[maxTokens + 1];  
+
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            args[i] = new char[tokens[i].size() + 1];
+            strcpy(args[i], tokens[i].c_str());
+        }
+
+        args[numTokens] = nullptr;
+
+        if (strcmp(args[0], "exit") == 0) {
+            int exitCode = (numTokens > 1) ? atoi(args[1]) : 0;
+
+            for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+                delete[] args[i];
+            }
+
+            exit(exitCode);  
+        }
+        
+        else if (strcmp(args[0], "!!") == 0) {
+            execDoubleBang(lastExecutedArgs);
+        }
+        
+        else {
+            execArg(args);
+        }
+
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            if (args[i] != nullptr) {
+                delete[] args[i];
+            }
+        }
+    }
+}
+
+
+void execArg(char* arr[]) {
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        cerr << "Fork failed" << endl;
+        return;
+    } else if (pid == 0) {
+        int status_code = execvp(arr[0], arr);
+        if (status_code == -1) {
+            perror("Bad Command");
+        }
+        exit(status_code);
+    } else {
+        wait(NULL);
+
+        copyLastExecutedArgs(arr, lastExecutedArgs);
+
+        return;
+    }
+}
+
+void execDoubleBang(char* arr[]) {
+    pid_t pid = fork();
+    if (pid == -1) {
+        cerr << "Fork failed" << endl;
+        return;
+    } else if (pid == 0) {
+        int status_code = execvp(arr[0], arr);
+        if (status_code == -1) {
+            perror("Bad Command");
+        }
+        exit(0);
+    } else {
+        wait(NULL);
+
+        return;
+    }
+}
+
+void copyLastExecutedArgs(char* source[], char* destination[]) {
+    for (int i = 0; i < maxTokens + 1; ++i) {
+        if (source[i] != nullptr) {
+            destination[i] = new char[strlen(source[i]) + 1];
+            strcpy(destination[i], source[i]);
+        } else {
+            destination[i] = nullptr;
+        }
+    }
+}
+
+---------------------------------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+
+using namespace std;
+
+string input; 
+
+
+const int maxTokens = 10; 
+char* lastExecutedArgs[maxTokens + 1];
+
+void execArg(char* arr[]);
+void execDoubleBang(char* arr[]);
+void copyLastExecutedArgs(char* source[], char* destination[]);
+
+void mainLoop();
+
+int main(int argc, char* argv[]) {
+    
+    if (argc <= 1) {
+        mainLoop();
+    }
+    
+    else {
+        ifstream inputFile(argv[1]); 
+        if (!inputFile) { 
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1; 
+        }
+        string line;
+        while (getline(inputFile, line)) {
+            cout << line << endl;
+        }
+    }
+    return 0;
+}
+
+void mainLoop() {
+    while (1) {
+        cout << "icsh $ ";
+        getline(cin, input);
+        
+        if (input.empty()) {
+            continue;
+        }
+
+        istringstream iss(input);
+        vector<string> tokens;
+
+        string token;
+        while (iss >> token) {
+            tokens.push_back(token);
+        }
+
+        const int numTokens = tokens.size();
+        char* args[maxTokens + 1];  
+
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            args[i] = new char[tokens[i].size() + 1];
+            strcpy(args[i], tokens[i].c_str());
+        }
+
+        args[numTokens] = nullptr;
+
+        if (strcmp(args[0], "exit") == 0) {
+            int exitCode = (numTokens > 1) ? atoi(args[1]) : 0;
+
+            for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+                delete[] args[i];
+            }
+
+            exit(exitCode);  
+        }
+        
+        else if (strcmp(args[0], "!!") == 0) {
+            execDoubleBang(lastExecutedArgs);
+        }
+        
+        else {
+            execArg(args);
+        }
+
+        for (int i = 0; i < numTokens && i < maxTokens; ++i) {
+            if (args[i] != nullptr) {
+                delete[] args[i];
+            }
+        }
+    }
+}
+
+
+void execArg(char* arr[]) {
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        cerr << "Fork failed" << endl;
+        return;
+    } else if (pid == 0) {
+        int status_code = execvp(arr[0], arr);
+        if (status_code == -1) {
+            perror("Bad Command");
+        }
+        exit(status_code);
+    } else {
+        wait(NULL);
+
+        copyLastExecutedArgs(arr, lastExecutedArgs);
+
+        return;
+    }
+}
+
+void execDoubleBang(char* arr[]) {
+    pid_t pid = fork();
+    if (pid == -1) {
+        cerr << "Fork failed" << endl;
+        return;
+    } else if (pid == 0) {
+        int status_code = execvp(arr[0], arr);
+        if (status_code == -1) {
+            perror("Bad Command");
+        }
+        exit(0);
+    } else {
+        wait(NULL);
+
+        return;
+    }
+}
+
+void copyLastExecutedArgs(char* source[], char* destination[]) {
+    for (int i = 0; i < maxTokens + 1; ++i) {
+        if (source[i] != nullptr) {
+            destination[i] = new char[strlen(source[i]) + 1];
+            strcpy(destination[i], source[i]);
+        } else {
+            destination[i] = nullptr;
+        }
+    }
+}
+
+
+-----------------------------------------------------------------------------------------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+
+using namespace std;
+
+string input; 
+
+
+void mainLoop(const string& input);
+
+int main(int argc, char* argv[]) {
+    
+    if (argc <= 1) {
+        while (1) {
+        cout << "icsh $ ";
+        getline(cin, input);
+        
+        if (input.empty()) {
+            continue;
+        }
+
+        mainLoop(input);
+        }
+    }
+    
+    else {
+        ifstream inputFile(argv[1]); 
+        if (!inputFile) { 
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1; 
+        }
+        string line;
+        while (getline(inputFile, line)) {
+            if (line.find("#!/bin/bash") == 0 || line.empty()) {
+                continue;
+            }
+            mainLoop(line); 
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string& input) {
+    if (strncmp(input.c_str(), "exit", 4) == 0) {
+        int exitCode = atoi(input.substr(4).c_str());
+        exit(exitCode);
+    }
+    else {
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0) { 
+            istringstream iss(input);
+            vector<string> tokens;
+            string token;
+            
+            while (iss >> token) {
+                tokens.push_back(token);
+            }
+            
+            vector<char*> args(tokens.size() + 1);  
+            for (size_t i = 0; i < tokens.size(); ++i) {
+                args[i] = const_cast<char*>(tokens[i].c_str()); 
+            }
+            args[tokens.size()] = nullptr;  // nullptr termination
+            
+            execvp(args[0], args.data());
+            
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        }
+        else { // Parent process
+            wait(NULL); // Wait for the child process to finish
+        }
+    }
+}
+
+-----------------------------------------------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+
+using namespace std;
+
+string input; 
+
+
+void mainLoop(const string& input);
+
+int main(int argc, char* argv[]) {
+    
+    if (argc <= 1) {
+        while (1) {
+        cout << "icsh $ ";
+        getline(cin, input);
+        
+        if (input.empty()) {
+            continue;
+        }
+
+        mainLoop(input);
+        }
+    }
+    
+    else {
+        ifstream inputFile(argv[1]); 
+        if (!inputFile) { 
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1; 
+        }
+        string line;
+        while (getline(inputFile, line)) {
+            if (line.find("#!/bin/bash") == 0 || line.empty()) {
+                continue;
+            }
+            mainLoop(line); 
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string& input) {
+    static string lastCommand; 
+    
+    if (strncmp(input.c_str(), "exit", 4) == 0) {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    }
+    else if (input == "!!") {
+        if (!lastCommand.empty()) {
+            mainLoop(lastCommand);
+        } else {
+            return;
+        }
+    }
+    else {
+        lastCommand = input; 
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0) { 
+            istringstream iss(input);
+            vector<string> tokens;
+            string token;
+            
+            while (iss >> token) {
+                tokens.push_back(token);
+            }
+            
+            vector<char*> args(tokens.size() + 1); 
+            for (size_t i = 0; i < tokens.size(); ++i) {
+                args[i] = const_cast<char*>(tokens[i].c_str()); 
+            }
+            args[tokens.size()] = nullptr;  
+            
+            execvp(args[0], args.data());
+            
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        }
+        else {
+            wait(NULL); 
+        }
+    }
+}
+
+------------------------------------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+
+using namespace std;
+
+string input; 
+pid_t foregroundProcessGroup = -1;
+
+void mainLoop(const string& input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+
+int main(int argc, char* argv[]) {
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);    
+    
+    if (argc <= 1) {
+        while (1) {
+        cout << "icsh $ ";
+        getline(cin, input);
+        
+        if (input.empty()) {
+            continue;
+        }
+
+        mainLoop(input);
+        }
+    }
+    
+    else {
+        ifstream inputFile(argv[1]); 
+        if (!inputFile) { 
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1; 
+        }
+        string line;
+        while (getline(inputFile, line)) {
+            if (line.find("#!/bin/bash") == 0 || line.empty()) {
+                continue;
+            }
+            mainLoop(line); 
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string& input) {
+    static string lastCommand; 
+
+    if (strncmp(input.c_str(), "exit", 4) == 0) {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    } else if (input == "!!") {
+        if (!lastCommand.empty()) {
+            mainLoop(lastCommand);
+        } else {
+            return;
+        }
+    } else {
+        lastCommand = input; 
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) { 
+            istringstream iss(input);
+            vector<string> tokens;
+            string token;
+
+            while (iss >> token) {
+                tokens.push_back(token);
+            }
+
+            vector<char*> args(tokens.size() + 1); 
+            for (size_t i = 0; i < tokens.size(); ++i) {
+                args[i] = const_cast<char*>(tokens[i].c_str()); 
+            }
+            args[tokens.size()] = nullptr; 
+
+            execvp(args[0], args.data());
+
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        } else { 
+            foregroundProcessGroup = pid; 
+            waitpid(pid, NULL, 0);
+            foregroundProcessGroup = -1; 
+        }
+    }
+}
+
+void handleCtrlC(int signal) {
+    if (foregroundProcessGroup != -1) {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT); 
+    } else {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal) {
+    if (foregroundProcessGroup != -1) {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP); 
+    } else {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+--------------------------------------------------------------------------------------------------
+
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+
+using namespace std;
+
+string input; 
+pid_t foregroundProcessGroup = -1;
+
+void mainLoop(const string& input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+
+int main(int argc, char* argv[]) {
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);    
+    
+    if (argc <= 1) {
+        while (1) {
+        cout << "icsh $ ";
+        getline(cin, input);
+        
+        if (input.empty()) {
+            continue;
+        }
+
+        mainLoop(input);
+        }
+    }
+    
+    else {
+        ifstream inputFile(argv[1]); 
+        if (!inputFile) { 
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1; 
+        }
+        string line;
+        while (getline(inputFile, line)) {
+            if (line.find("#!/bin/bash") == 0 || line.empty()) {
+                continue;
+            }
+            mainLoop(line); 
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string& input) {
+    static string lastCommand; 
+
+    if (strncmp(input.c_str(), "exit", 4) == 0) {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    } else if (input == "!!") {
+        if (!lastCommand.empty()) {
+            mainLoop(lastCommand);
+        } else {
+            return;
+        }
+    } else {
+        lastCommand = input; 
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) { 
+            istringstream iss(input);
+            vector<string> tokens;
+            string token;
+
+            while (iss >> token) {
+                tokens.push_back(token);
+            }
+
+            vector<char*> args(tokens.size() + 1); 
+            for (size_t i = 0; i < tokens.size(); ++i) {
+                args[i] = const_cast<char*>(tokens[i].c_str()); 
+            }
+            args[tokens.size()] = nullptr; 
+            int inFile = -1;
+            int outFile = -1;
+            for (size_t i = 0; i < tokens.size(); ++i) {
+                if (tokens[i] == "<") {
+                    inFile = open(tokens[i + 1].c_str(), O_RDONLY);
+                    if (inFile < 0) {
+                        perror("Input file error");
+                        exit(EXIT_FAILURE);
+                    }
+                    dup2(inFile, STDIN_FILENO);
+                    close(inFile);
+                    args.erase(args.begin() + i, args.begin() + i + 2);
+                } else if (tokens[i] == ">") {
+                    outFile = open(tokens[i + 1].c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+                    if (outFile < 0) {
+                        perror("Output file error");
+                        exit(EXIT_FAILURE);
+                    }
+                    dup2(outFile, STDOUT_FILENO);
+                    close(outFile);
+                    args.erase(args.begin() + i, args.begin() + i + 2);
+                }
+            }
+
+            execvp(args[0], args.data());
+
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        } else { 
+            foregroundProcessGroup = pid; 
+            waitpid(pid, NULL, 0);
+            foregroundProcessGroup = -1; 
+        }
+    }
+}
+
+void handleCtrlC(int signal) {
+    if (foregroundProcessGroup != -1) {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT); 
+    } else {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal) {
+    if (foregroundProcessGroup != -1) {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP); 
+    } else {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+
+-----------------------------------------------------------------------------
+
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+
+using namespace std;
+
+string input; 
+pid_t foregroundProcessGroup = -1;
+vector<pair<int, pid_t>> backgroundProcesses;
+
+void mainLoop(const string& input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+void handleChildExit(int signal);
+
+
+int main(int argc, char* argv[]) {
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);   
+    signal(SIGCHLD, handleChildExit); 
+    
+    if (argc <= 1) {
+        while (1) {
+        cout << "icsh $ ";
+        getline(cin, input);
+        
+        if (input.empty()) {
+            continue;
+        }
+
+        mainLoop(input);
+        }
+    }
+    
+    else {
+        ifstream inputFile(argv[1]); 
+        if (!inputFile) { 
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1; 
+        }
+        string line;
+        while (getline(inputFile, line)) {
+            if (line.find("#!/bin/bash") == 0 || line.empty()) {
+                continue;
+            }
+            mainLoop(line); 
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string& input) {
+    static string lastCommand; 
+
+    if (strncmp(input.c_str(), "exit", 4) == 0) {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    } else if (input == "!!") {
+        if (!lastCommand.empty()) {
+            mainLoop(lastCommand);
+        } else {
+            return;
+        }
+    } else {
+        lastCommand = input; 
+        bool isBackground = false;
+        if (!input.empty() && input.back() == '&') {
+            isBackground = true;
+        }
+
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) { 
+            // Child process
+            if (isBackground) {
+                // Remove '&' from the command
+                string cmd = input.substr(0, input.size() - 1);
+                execlp("/bin/sh", "sh", "-c", cmd.c_str(), nullptr);
+            } else {
+                istringstream iss(input);
+                vector<string> tokens;
+                string token;
+
+                while (iss >> token) {
+                    tokens.push_back(token);
+                }
+
+                vector<char*> args(tokens.size() + 1); 
+                for (size_t i = 0; i < tokens.size(); ++i) {
+                    args[i] = const_cast<char*>(tokens[i].c_str()); 
+                }
+                args[tokens.size()] = nullptr; 
+
+                execvp(args[0], args.data());
+
+                perror("Bad Command");
+                exit(EXIT_FAILURE);
+            }
+        } else { 
+            // Parent process
+            if (isBackground) {
+                cout << "[" << backgroundProcesses.size() + 1 << "] " << pid << endl;
+                backgroundProcesses.push_back(make_pair(backgroundProcesses.size() + 1, pid));
+            } else {
+                foregroundProcessGroup = pid; 
+                waitpid(pid, NULL, 0);
+                foregroundProcessGroup = -1; 
+            }
+        }
+    }
+}
+
+void handleCtrlC(int signal) {
+    if (foregroundProcessGroup != -1) {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT); 
+    } else {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal) {
+    if (foregroundProcessGroup != -1) {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP); 
+    } else {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleChildExit(int signal) {
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        for (auto it = backgroundProcesses.begin(); it != backgroundProcesses.end(); ++it) {
+            if (it->second == pid) {
+                cout << "[" << it->first << "]+  Done" << endl; 
+                backgroundProcesses.erase(it);
+                break;
+            }
+        }
+    }
+}
+
+------------------------------------------------------------------------------
+
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
+
+using namespace std;
+
+string input; 
+pid_t foregroundProcessGroup = -1;
+vector<pair<int, pid_t>> backgroundProcesses;
+vector<string> backgroundCommands;
+
+void mainLoop(const string& input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+void handleChildExit(int signal);
+void listJobs();
+
+int main(int argc, char* argv[]) {
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);
+    signal(SIGCHLD, handleChildExit);
+    
+    if (argc <= 1) {
+        while (1) {
+            cout << "icsh $ ";
+            getline(cin, input);
+            
+            if (input.empty()) {
+                continue;
+            }
+            
+            mainLoop(input);
+        }
+    } else {
+        ifstream inputFile(argv[1]); 
+        if (!inputFile) { 
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1; 
+        }
+        string line;
+        while (getline(inputFile, line)) {
+            if (line.find("#!/bin/bash") == 0 || line.empty()) {
+                continue;
+            }
+            mainLoop(line); 
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string& input) {
+    static string lastCommand; 
+
+    if (strncmp(input.c_str(), "exit", 4) == 0) {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    } else if (input == "!!") {
+        if (!lastCommand.empty()) {
+            mainLoop(lastCommand);
+        } else {
+            return;
+        }
+    } else if (input == "jobs") {
+        listJobs();
+    } else {
+        lastCommand = input; 
+        bool isBackground = false;
+        if (!input.empty() && input.back() == '&') {
+            isBackground = true;
+        }
+
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) { 
+            // Child process
+            if (isBackground) {
+                // Remove '&' from the command
+                string cmd = input.substr(0, input.size() - 1);
+                execlp("/bin/sh", "sh", "-c", cmd.c_str(), nullptr);
+            } else {
+                istringstream iss(input);
+                vector<string> tokens;
+                string token;
+
+                while (iss >> token) {
+                    tokens.push_back(token);
+                }
+
+                vector<char*> args(tokens.size() + 1); 
+                for (size_t i = 0; i < tokens.size(); ++i) {
+                    args[i] = const_cast<char*>(tokens[i].c_str()); 
+                }
+                args[tokens.size()] = nullptr; 
+
+                execvp(args[0], args.data());
+
+                perror("Bad Command");
+                exit(EXIT_FAILURE);
+            }
+        } else { 
+            // Parent process
+            if (isBackground) {
+                cout << "[" << backgroundProcesses.size() + 1 << "] " << pid << endl;
+                backgroundProcesses.push_back(make_pair(backgroundProcesses.size() + 1, pid));
+                backgroundCommands.push_back(input);
+            } else {
+                foregroundProcessGroup = pid; 
+                waitpid(pid, NULL, 0);
+                foregroundProcessGroup = -1; 
+            }
+        }
+    }
+}
+
+void handleCtrlC(int signal) {
+    if (foregroundProcessGroup != -1) {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT); 
+    } else {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal) {
+    if (foregroundProcessGroup != -1) {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP); 
+    } else {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleChildExit(int signal) {
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        for (auto it = backgroundProcesses.begin(); it != backgroundProcesses.end(); ++it) {
+            if (it->second == pid) {
+                cout << "[" << it->first << "]+  Done" << endl;
+                backgroundProcesses.erase(it);
+                backgroundCommands.erase(backgroundCommands.begin() + (it - backgroundProcesses.begin()));
+                break;
+            }
+        }
+    }
+}
+
+void listJobs() {
+    for (size_t i = 0; i < backgroundProcesses.size(); ++i) {
+        cout << "[" << backgroundProcesses[i].first << "] " << (backgroundProcesses[i].second) << "   ";
+        cout << backgroundCommands[i] << endl;
+    }
+}
+
+
+
+-------------------------------------------------------------------------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
+
+using namespace std;
+
+string input;
+pid_t foregroundProcessGroup = -1;
+
+void mainLoop(const string &input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+void handleBackgroundProcessTermination(int signal);
+
+int main(int argc, char *argv[])
+{
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);
+    signal(SIGCHLD, handleBackgroundProcessTermination);
+
+    if (argc <= 1)
+    {
+        while (1)
+        {
+            cout << "icsh $ ";
+            getline(cin, input);
+
+            if (input.empty())
+            {
+                continue;
+            }
+
+            mainLoop(input);
+        }
+    }
+
+    else
+    {
+        ifstream inputFile(argv[1]);
+        if (!inputFile)
+        {
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1;
+        }
+        string line;
+        while (getline(inputFile, line))
+        {
+            if (line.find("#!/bin/bash") == 0 || line.empty())
+            {
+                continue;
+            }
+            mainLoop(line);
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string &input)
+{
+    static string lastCommand;
+    static int jobCount = 0;
+
+    if (strncmp(input.c_str(), "exit", 4) == 0)
+    {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    }
+    else if (input == "!!")
+    {
+        if (!lastCommand.empty())
+        {
+            mainLoop(lastCommand);
+        }
+        else
+        {
+            return;
+        }
+    }
+    else
+{
+    lastCommand = input;
+    bool isBackground = false;
+    string command = input; // Make a copy of input
+    if (!command.empty() && command.back() == '&')
+    {
+        isBackground = true;
+        command.pop_back(); // Remove the '&' character from the copy
+    }
+    pid_t pid = fork();
+    if (pid == -1)
+    {
+        perror("Fork failed");
+        exit(EXIT_FAILURE);
+    }
+    else if (pid == 0)
+    {
+        istringstream iss(command);
+        vector<string> tokens;
+        string token;
+
+        while (iss >> token)
+        {
+            tokens.push_back(token);
+        }
+
+        vector<char *> args(tokens.size() + 1);
+        for (size_t i = 0; i < tokens.size(); ++i)
+        {
+            args[i] = const_cast<char *>(tokens[i].c_str());
+        }
+        args[tokens.size()] = nullptr;
+
+        execvp(args[0], args.data());
+
+        perror("Bad Command");
+        exit(EXIT_FAILURE);
+    }
+    else
+    {
+        if (isBackground)
+        {
+            cout << "[" << ++jobCount << "] " << pid << endl;
+        }
+        else
+        {
+            foregroundProcessGroup = pid;
+            int status;
+            waitpid(pid, &status, WUNTRACED); // Wait for the child process to finish or be stopped
+            if (WIFSTOPPED(status))             // If child process is stopped
+            {
+                cout << "Foreground job stopped." << endl;
+            }
+            foregroundProcessGroup = -1;
+        }
+    }
+}
+}
+
+void handleCtrlC(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleBackgroundProcessTermination(int signal)
+{
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(status))
+        {
+            cout << "[" << pid << "] Done" << endl;
+        }
+    }
+}
+
+-------------------------------------------------------------------------------------
+
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
+
+using namespace std;
+
+struct BackgroundProcess {
+    int jobID;
+    pid_t pid;
+    string command;
+    bool running;
+};
+
+string input;
+pid_t foregroundProcessGroup = -1;
+vector<BackgroundProcess> backgroundProcesses;
+
+void mainLoop(const string &input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+void handleBackgroundProcessTermination(int signal);
+
+int main(int argc, char *argv[])
+{
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);
+    signal(SIGCHLD, handleBackgroundProcessTermination);
+
+    if (argc <= 1)
+    {
+        while (1)
+        {
+            cout << "icsh $ ";
+            getline(cin, input);
+
+            if (input.empty())
+            {
+                continue;
+            }
+
+            mainLoop(input);
+        }
+    }
+
+    else
+    {
+        ifstream inputFile(argv[1]);
+        if (!inputFile)
+        {
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1;
+        }
+        string line;
+        while (getline(inputFile, line))
+        {
+            if (line.find("#!/bin/bash") == 0 || line.empty())
+            {
+                continue;
+            }
+            mainLoop(line);
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string &input)
+{
+    static string lastCommand;
+    static int jobCount = 0;
+
+    if (strncmp(input.c_str(), "exit", 4) == 0)
+    {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    }
+    else if (input == "!!")
+    {
+        if (!lastCommand.empty())
+        {
+            mainLoop(lastCommand);
+        }
+        else
+        {
+            return;
+        }
+    }
+    else if (input == "jobs")
+    {
+        for (const auto &process : backgroundProcesses)
+        {
+            string status = process.running ? "Running" : "Done";
+            cout << "[" << process.jobID << "]" << (process.running ? "-" : "+") << "  " << status << "\t\t\t" << process.command << endl;
+        }
+    }
+    else
+    {
+        lastCommand = input;
+        bool isBackground = false;
+        string command = input; // Make a copy of input
+        if (!command.empty() && command.back() == '&')
+        {
+            isBackground = true;
+            command.pop_back(); // Remove the '&' character from the copy
+        }
+        pid_t pid = fork();
+        if (pid == -1)
+        {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0)
+        {
+            istringstream iss(command);
+            vector<string> tokens;
+            string token;
+
+            while (iss >> token)
+            {
+                tokens.push_back(token);
+            }
+
+            vector<char *> args(tokens.size() + 1);
+            for (size_t i = 0; i < tokens.size(); ++i)
+            {
+                args[i] = const_cast<char *>(tokens[i].c_str());
+            }
+            args[tokens.size()] = nullptr;
+
+            execvp(args[0], args.data());
+
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            if (isBackground)
+            {
+                cout << "[" << ++jobCount << "] " << pid << endl;
+                backgroundProcesses.push_back({jobCount, pid, command, true});
+            }
+            else
+            {
+                foregroundProcessGroup = pid;
+                int status;
+                waitpid(pid, &status, WUNTRACED); // Wait for the child process to finish or be stopped
+                if (WIFSTOPPED(status))             // If child process is stopped
+                {
+                    cout << "Foreground job stopped." << endl;
+                }
+                foregroundProcessGroup = -1;
+            }
+        }
+    }
+}
+
+void handleCtrlC(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleBackgroundProcessTermination(int signal)
+{
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(status))
+        {
+            for (auto &process : backgroundProcesses)
+            {
+                if (process.pid == pid)
+                {
+                    process.running = false;
+                    cout << "[" << process.jobID << "]  Done\t\t\t" << process.command << endl;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------
+
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
+
+using namespace std;
+
+struct BackgroundProcess {
+    int jobID;
+    pid_t pid;
+    string command;
+    bool running;
+};
+
+string input;
+pid_t foregroundProcessGroup = -1;
+vector<BackgroundProcess> backgroundProcesses;
+
+void mainLoop(const string &input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+void handleBackgroundProcessTermination(int signal);
+void bringToForeground(int jobID);
+
+int main(int argc, char *argv[])
+{
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);
+    signal(SIGCHLD, handleBackgroundProcessTermination);
+
+    if (argc <= 1)
+    {
+        while (1)
+        {
+            cout << "icsh $ ";
+            getline(cin, input);
+
+            if (input.empty())
+            {
+                continue;
+            }
+
+            mainLoop(input);
+        }
+    }
+
+    else
+    {
+        ifstream inputFile(argv[1]);
+        if (!inputFile)
+        {
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1;
+        }
+        string line;
+        while (getline(inputFile, line))
+        {
+            if (line.find("#!/bin/bash") == 0 || line.empty())
+            {
+                continue;
+            }
+            mainLoop(line);
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string &input)
+{
+    static string lastCommand;
+    static int jobCount = 0;
+
+    if (strncmp(input.c_str(), "exit", 4) == 0)
+    {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    }
+    else if (input == "!!")
+    {
+        if (!lastCommand.empty())
+        {
+            mainLoop(lastCommand);
+        }
+        else
+        {
+            return;
+        }
+    }
+    else if (input == "jobs")
+    {
+        for (const auto &process : backgroundProcesses)
+        {
+            string status = process.running ? "Running" : "Done";
+            cout << "[" << process.jobID << "]" << (process.running ? "-" : "+") << "  " << status << "\t\t\t" << process.command << endl;
+        }
+    }
+    else if (input.find("fg %") == 0)
+    {
+        int jobID = stoi(input.substr(4));
+        bringToForeground(jobID);
+    }
+    else
+    {
+        lastCommand = input;
+        bool isBackground = false;
+        string command = input; // Make a copy of input
+        if (!command.empty() && command.back() == '&')
+        {
+            isBackground = true;
+            command.pop_back(); // Remove the '&' character from the copy
+        }
+        pid_t pid = fork();
+        if (pid == -1)
+        {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0)
+        {
+            istringstream iss(command);
+            vector<string> tokens;
+            string token;
+
+            while (iss >> token)
+            {
+                tokens.push_back(token);
+            }
+
+            vector<char *> args(tokens.size() + 1);
+            for (size_t i = 0; i < tokens.size(); ++i)
+            {
+                args[i] = const_cast<char *>(tokens[i].c_str());
+            }
+            args[tokens.size()] = nullptr;
+
+            execvp(args[0], args.data());
+
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            if (isBackground)
+            {
+                cout << "[" << ++jobCount << "] " << pid << endl;
+                backgroundProcesses.push_back({jobCount, pid, command, true});
+            }
+            else
+            {
+                foregroundProcessGroup = pid;
+                int status;
+                waitpid(pid, &status, WUNTRACED); // Wait for the child process to finish or be stopped
+                if (WIFSTOPPED(status))             // If child process is stopped
+                {
+                    cout << "Foreground job stopped." << endl;
+                }
+                foregroundProcessGroup = -1;
+            }
+        }
+    }
+}
+
+void handleCtrlC(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleBackgroundProcessTermination(int signal)
+{
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(status))
+        {
+            for (auto &process : backgroundProcesses)
+            {
+                if (process.pid == pid)
+                {
+                    process.running = false;
+                    cout << "[" << process.jobID << "]  Done\t\t\t" << process.command << endl;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void bringToForeground(int jobID)
+{
+    for (auto &process : backgroundProcesses)
+    {
+        if (process.jobID == jobID)
+        {
+            cout << process.command << endl;
+            process.running = true;
+            foregroundProcessGroup = process.pid;
+            waitpid(process.pid, nullptr, 0); // Wait for the process to finish or be stopped
+            foregroundProcessGroup = -1;
+            break;
+        }
+    }
+}
+
+
+
+---------------------------------------------------------------------------------------------------
+
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <signal.h>
+
+using namespace std;
+
+struct BackgroundProcess {
+    int jobID;
+    pid_t pid;
+    string command;
+    bool running;
+};
+
+string input;
+pid_t foregroundProcessGroup = -1;
+vector<BackgroundProcess> backgroundProcesses;
+
+void mainLoop(const string &input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+void handleBackgroundProcessTermination(int signal);
+void bringToForeground(int jobID);
+
+int main(int argc, char *argv[])
+{
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);
+    signal(SIGCHLD, handleBackgroundProcessTermination);
+
+    if (argc <= 1)
+    {
+        while (1)
+        {
+            cout << "icsh $ ";
+            getline(cin, input);
+
+            if (input.empty())
+            {
+                continue;
+            }
+
+            mainLoop(input);
+        }
+    }
+
+    else
+    {
+        ifstream inputFile(argv[1]);
+        if (!inputFile)
+        {
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1;
+        }
+        string line;
+        while (getline(inputFile, line))
+        {
+            if (line.find("#!/bin/bash") == 0 || line.empty())
+            {
+                continue;
+            }
+            mainLoop(line);
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string &input)
+{
+    static string lastCommand;
+    static int jobCount = 0;
+
+    if (strncmp(input.c_str(), "exit", 4) == 0)
+    {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    }
+    else if (input == "!!")
+    {
+        if (!lastCommand.empty())
+        {
+            mainLoop(lastCommand);
+        }
+        else
+        {
+            return;
+        }
+    }
+    else if (input == "jobs")
+    {
+        for (const auto &process : backgroundProcesses)
+        {
+            string status = process.running ? "Running" : "Done";
+            cout << "[" << process.jobID << "]" << (process.running ? "-" : "+") << "  " << status << "\t\t\t" << process.command << endl;
+        }
+    }
+    else if (input.find("fg %") == 0)
+    {
+        int jobID = stoi(input.substr(4));
+        bringToForeground(jobID);
+    }
+    else
+    {
+        lastCommand = input;
+        bool isBackground = false;
+        string command = input; // Make a copy of input
+        if (!command.empty() && command.back() == '&')
+        {
+            isBackground = true;
+            command.pop_back(); // Remove the '&' character from the copy
+        }
+        
+        // Check for input and output redirection
+        string inputFile, outputFile;
+        size_t inputRedirectPos = command.find('<');
+        size_t outputRedirectPos = command.find('>');
+        if (inputRedirectPos != string::npos) {
+            inputFile = command.substr(inputRedirectPos + 1);
+            command.erase(inputRedirectPos); // Remove the '<' and the input file from the command
+        }
+        if (outputRedirectPos != string::npos) {
+            outputFile = command.substr(outputRedirectPos + 1);
+            command.erase(outputRedirectPos); // Remove the '>' and the output file from the command
+        }
+        
+        pid_t pid = fork();
+        if (pid == -1)
+        {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0)
+        {
+            // Input redirection
+            if (!inputFile.empty()) {
+                int fd = open(inputFile.c_str(), O_RDONLY);
+                if (fd == -1) {
+                    perror("Failed to open input file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+            
+            // Output redirection
+            if (!outputFile.empty()) {
+                int fd = open(outputFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd == -1) {
+                    perror("Failed to open output file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+            
+            istringstream iss(command);
+            vector<string> tokens;
+            string token;
+
+            while (iss >> token)
+            {
+                tokens.push_back(token);
+            }
+
+            vector<char *> args(tokens.size() + 1);
+            for (size_t i = 0; i < tokens.size(); ++i)
+            {
+                args[i] = const_cast<char *>(tokens[i].c_str());
+            }
+            args[tokens.size()] = nullptr;
+
+            execvp(args[0], args.data());
+
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            if (isBackground)
+            {
+                cout << "[" << ++jobCount << "] " << pid << endl;
+                backgroundProcesses.push_back({jobCount, pid, command, true});
+            }
+            else
+            {
+                foregroundProcessGroup = pid;
+                int status;
+                waitpid(pid, &status, WUNTRACED); // Wait for the child process to finish or be stopped
+                if (WIFSTOPPED(status))             // If child process is stopped
+                {
+                    cout << "Foreground job stopped." << endl;
+                }
+                foregroundProcessGroup = -1;
+            }
+        }
+    }
+}
+
+void handleCtrlC(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleBackgroundProcessTermination(int signal)
+{
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(status))
+        {
+            for (auto &process : backgroundProcesses)
+            {
+                if (process.pid == pid)
+                {
+                    process.running = false;
+                    cout << "[" << process.jobID << "]  Done\t\t\t" << process.command << endl;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void bringToForeground(int jobID)
+{
+    for (auto &process : backgroundProcesses)
+    {
+        if (process.jobID == jobID)
+        {
+            cout << process.command << endl;
+            process.running = true;
+            foregroundProcessGroup = process.pid;
+            waitpid(process.pid, nullptr, 0); // Wait for the process to finish or be stopped
+            foregroundProcessGroup = -1;
+            break;
+        }
+    }
+}
+
+------------------------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <signal.h>
+
+using namespace std;
+
+struct BackgroundProcess {
+    int jobID;
+    pid_t pid;
+    string command;
+    bool running;
+};
+
+string input;
+pid_t foregroundProcessGroup = -1;
+vector<BackgroundProcess> backgroundProcesses;
+
+void mainLoop(const string &input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+void handleBackgroundProcessTermination(int signal);
+void bringToForeground(int jobID);
+
+int main(int argc, char *argv[])
+{
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);
+    signal(SIGCHLD, handleBackgroundProcessTermination);
+
+    if (argc <= 1)
+    {
+        while (1)
+        {
+            cout << "icsh $ ";
+            getline(cin, input);
+
+            if (input.empty())
+            {
+                continue;
+            }
+
+            mainLoop(input);
+        }
+    }
+
+    else
+    {
+        ifstream inputFile(argv[1]);
+        if (!inputFile)
+        {
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1;
+        }
+        string line;
+        while (getline(inputFile, line))
+        {
+            if (line.find("#!/bin/bash") == 0 || line.empty())
+            {
+                continue;
+            }
+            mainLoop(line);
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string &input)
+{
+    static string lastCommand;
+    static int jobCount = 0;
+
+    if (strncmp(input.c_str(), "exit", 4) == 0)
+    {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    }
+    else if (input == "!!")
+    {
+        if (!lastCommand.empty())
+        {
+            cout << lastCommand << endl;
+            mainLoop(lastCommand);
+        }
+        else
+        {
+            cout << "No previous command found." << endl;
+        }
+        return;
+    }
+    else if (input == "jobs")
+    {
+        for (const auto &process : backgroundProcesses)
+        {
+            string status = process.running ? "Running" : "Done";
+            cout << "[" << process.jobID << "]" << (process.running ? "-" : "+") << "  " << status << "\t\t\t" << process.command << endl;
+        }
+    }
+    else if (input.find("fg %") == 0)
+    {
+        int jobID = stoi(input.substr(4));
+        bringToForeground(jobID);
+    }
+    else
+    {
+        lastCommand = input;
+        bool isBackground = false;
+        string command = input; // Make a copy of input
+        if (!command.empty() && command.back() == '&')
+        {
+            isBackground = true;
+            command.pop_back(); // Remove the '&' character from the copy
+        }
+        
+        // Check for input and output redirection
+        string inputFile, outputFile;
+        size_t inputRedirectPos = command.find('<');
+        size_t outputRedirectPos = command.find('>');
+        if (inputRedirectPos != string::npos) {
+            inputFile = command.substr(inputRedirectPos + 1);
+            command.erase(inputRedirectPos); // Remove the '<' and the input file from the command
+        }
+        if (outputRedirectPos != string::npos) {
+            outputFile = command.substr(outputRedirectPos + 1);
+            command.erase(outputRedirectPos); // Remove the '>' and the output file from the command
+        }
+        
+        pid_t pid = fork();
+        if (pid == -1)
+        {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0)
+        {
+            // Input redirection
+            if (!inputFile.empty()) {
+                int fd = open(inputFile.c_str(), O_RDONLY);
+                if (fd == -1) {
+                    perror("Failed to open input file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+            
+            // Output redirection
+            if (!outputFile.empty()) {
+                int fd = open(outputFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd == -1) {
+                    perror("Failed to open output file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+            
+            istringstream iss(command);
+            vector<string> tokens;
+            string token;
+
+            while (iss >> token)
+            {
+                tokens.push_back(token);
+            }
+
+            vector<char *> args(tokens.size() + 1);
+            for (size_t i = 0; i < tokens.size(); ++i)
+            {
+                args[i] = const_cast<char *>(tokens[i].c_str());
+            }
+            args[tokens.size()] = nullptr;
+
+            execvp(args[0], args.data());
+
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            if (isBackground)
+            {
+                cout << "[" << ++jobCount << "] " << pid << endl;
+                backgroundProcesses.push_back({jobCount, pid, command, true});
+            }
+            else
+            {
+                foregroundProcessGroup = pid;
+                int status;
+                waitpid(pid, &status, WUNTRACED); // Wait for the child process to finish or be stopped
+                if (WIFSTOPPED(status))             // If child process is stopped
+                {
+                    cout << "Foreground job stopped." << endl;
+                }
+                foregroundProcessGroup = -1;
+            }
+        }
+    }
+}
+
+
+void handleCtrlC(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleBackgroundProcessTermination(int signal)
+{
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(status))
+        {
+            for (auto &process : backgroundProcesses)
+            {
+                if (process.pid == pid)
+                {
+                    process.running = false;
+                    cout << "[" << process.jobID << "]  Done\t\t\t" << process.command << endl;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void bringToForeground(int jobID)
+{
+    for (auto &process : backgroundProcesses)
+    {
+        if (process.jobID == jobID)
+        {
+            cout << process.command << endl;
+            process.running = true;
+            foregroundProcessGroup = process.pid;
+            waitpid(process.pid, nullptr, 0); // Wait for the process to finish or be stopped
+            foregroundProcessGroup = -1;
+            break;
+        }
+    }
+}
+
+------------------------------------------
+
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <signal.h>
+
+using namespace std;
+
+struct BackgroundProcess {
+    int jobID;
+    pid_t pid;
+    string command;
+    bool running;
+};
+
+string input;
+pid_t foregroundProcessGroup = -1;
+vector<BackgroundProcess> backgroundProcesses;
+int lastExitStatus = 0; // Variable to store the exit status of the last command
+
+void mainLoop(const string &input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+void handleBackgroundProcessTermination(int signal);
+void bringToForeground(int jobID);
+
+int main(int argc, char *argv[])
+{
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);
+    signal(SIGCHLD, handleBackgroundProcessTermination);
+
+    if (argc <= 1)
+    {
+        while (1)
+        {
+            cout << "icsh $ ";
+            getline(cin, input);
+
+            if (input.empty())
+            {
+                continue;
+            }
+
+            mainLoop(input);
+        }
+    }
+
+    else
+    {
+        ifstream inputFile(argv[1]);
+        if (!inputFile)
+        {
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1;
+        }
+        string line;
+        while (getline(inputFile, line))
+        {
+            if (line.find("#!/bin/bash") == 0 || line.empty())
+            {
+                continue;
+            }
+            mainLoop(line);
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string &input)
+{
+    static string lastCommand;
+    static int jobCount = 0;
+
+    if (strncmp(input.c_str(), "exit", 4) == 0)
+    {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    }
+    else if (input == "!!")
+    {
+        if (!lastCommand.empty())
+        {
+            cout << lastCommand << endl;
+            mainLoop(lastCommand);
+        }
+        else
+        {
+            cout << "No previous command found." << endl;
+        }
+        return;
+    }
+    else if (input == "jobs")
+    {
+        for (const auto &process : backgroundProcesses)
+        {
+            string status = process.running ? "Running" : "Done";
+            cout << "[" << process.jobID << "]" << (process.running ? "-" : "+") << "  " << status << "\t\t\t" << process.command << endl;
+        }
+    }
+    else if (input.find("fg %") == 0)
+    {
+        int jobID = stoi(input.substr(4));
+        bringToForeground(jobID);
+    }
+    else if (input == "echo $?")
+    {
+        cout << lastExitStatus << endl;
+    }
+    else
+    {
+        lastCommand = input;
+        bool isBackground = false;
+        string command = input; // Make a copy of input
+        if (!command.empty() && command.back() == '&')
+        {
+            isBackground = true;
+            command.pop_back(); // Remove the '&' character from the copy
+        }
+        
+        // Check for input and output redirection
+        string inputFile, outputFile;
+        size_t inputRedirectPos = command.find('<');
+        size_t outputRedirectPos = command.find('>');
+        if (inputRedirectPos != string::npos) {
+            inputFile = command.substr(inputRedirectPos + 1);
+            command.erase(inputRedirectPos); // Remove the '<' and the input file from the command
+        }
+        if (outputRedirectPos != string::npos) {
+            outputFile = command.substr(outputRedirectPos + 1);
+            command.erase(outputRedirectPos); // Remove the '>' and the output file from the command
+        }
+        
+        pid_t pid = fork();
+        if (pid == -1)
+        {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0)
+        {
+            // Input redirection
+            if (!inputFile.empty()) {
+                int fd = open(inputFile.c_str(), O_RDONLY);
+                if (fd == -1) {
+                    perror("Failed to open input file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+            
+            // Output redirection
+            if (!outputFile.empty()) {
+                int fd = open(outputFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd == -1) {
+                    perror("Failed to open output file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+            
+            istringstream iss(command);
+            vector<string> tokens;
+            string token;
+
+            while (iss >> token)
+            {
+                tokens.push_back(token);
+            }
+
+            vector<char *> args(tokens.size() + 1);
+            for (size_t i = 0; i < tokens.size(); ++i)
+            {
+                args[i] = const_cast<char *>(tokens[i].c_str());
+            }
+            args[tokens.size()] = nullptr;
+
+            execvp(args[0], args.data());
+
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            if (isBackground)
+            {
+                cout << "[" << ++jobCount << "] " << pid << endl;
+                backgroundProcesses.push_back({jobCount, pid, command, true});
+            }
+            else
+            {
+                foregroundProcessGroup = pid;
+                int status;
+                waitpid(pid, &status, WUNTRACED); // Wait for the child process to finish or be stopped
+                lastExitStatus = WIFEXITED(status) ? WEXITSTATUS(status) : 0; // Save the exit status of the command
+                if (WIFSTOPPED(status))             // If child process is stopped
+                {
+                    cout << "Foreground job stopped." << endl;
+                }
+                foregroundProcessGroup = -1;
+            }
+        }
+    }
+}
+
+void handleCtrlC(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleBackgroundProcessTermination(int signal)
+{
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(status))
+        {
+            for (auto &process : backgroundProcesses)
+            {
+                if (process.pid == pid)
+                {
+                    process.running = false;
+                    cout << "[" << process.jobID << "]  Done\t\t\t" << process.command << endl;
+                    break;
+                }
+            }
+        }
+
+        if (pid == foregroundProcessGroup) {
+            lastExitStatus = WIFEXITED(status) ? WEXITSTATUS(status) : 0;
+            foregroundProcessGroup = -1;
+        }
+    }
+}
+
+void bringToForeground(int jobID)
+{
+    for (auto &process : backgroundProcesses)
+    {
+        if (process.jobID == jobID)
+        {
+            cout << process.command << endl;
+            process.running = true;
+            foregroundProcessGroup = process.pid;
+            waitpid(process.pid, nullptr, 0); // Wait for the process to finish or be stopped
+            foregroundProcessGroup = -1;
+            break;
+        }
+    }
+}
+
+-------------------------------------------------------------
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <signal.h>
+
+using namespace std;
+
+struct BackgroundProcess {
+    int jobID;
+    pid_t pid;
+    string command;
+    bool running;
+};
+
+string input;
+pid_t foregroundProcessGroup = -1;
+vector<BackgroundProcess> backgroundProcesses;
+int lastExitStatus = 0; // Variable to store the exit status of the last command
+
+void mainLoop(const string &input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+void handleBackgroundProcessTermination(int signal);
+void bringToForeground(int jobID);
+
+int main(int argc, char *argv[])
+{
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);
+    signal(SIGCHLD, handleBackgroundProcessTermination);
+
+    if (argc <= 1)
+    {
+        while (1)
+        {
+            cout << "icsh $ ";
+            getline(cin, input);
+
+            if (input.empty())
+            {
+                continue;
+            }
+
+            mainLoop(input);
+        }
+    }
+
+    else
+    {
+        ifstream inputFile(argv[1]);
+        if (!inputFile)
+        {
+            cerr << "Error: Unable to open input file " << argv[1] << endl;
+            return 1;
+        }
+        string line;
+        while (getline(inputFile, line))
+        {
+            if (line.find("#!/bin/bash") == 0 || line.empty())
+            {
+                continue;
+            }
+            mainLoop(line);
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string &input)
+{
+    static string lastCommand;
+    static int jobCount = 0;
+
+    if (strncmp(input.c_str(), "exit", 4) == 0)
+    {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    }
+    else if (input == "!!")
+    {
+        if (!lastCommand.empty())
+        {
+            cout << lastCommand << endl;
+            mainLoop(lastCommand);
+        }
+        else
+        {
+            cout << "No previous command found." << endl;
+        }
+        return;
+    }
+    else if (input == "jobs")
+    {
+        for (const auto &process : backgroundProcesses)
+        {
+            string status = process.running ? "Running" : "Done";
+            cout << "[" << process.jobID << "]" << (process.running ? "-" : "+") << "  " << status << "\t\t\t" << process.command << endl;
+        }
+    }
+    else if (input.find("fg %") == 0)
+    {
+        int jobID = stoi(input.substr(4));
+        bringToForeground(jobID);
+    }
+    else if (input.find("bg %") == 0)
+    {
+        int jobID = stoi(input.substr(4));
+        for (auto &process : backgroundProcesses)
+        {
+            if (process.jobID == jobID && !process.running) // Resume only if the process is stopped
+            {
+                kill(process.pid, SIGCONT);
+                process.running = true;
+                cout << "[" << process.jobID << "] " << process.command << " &" << endl;
+                break;
+            }
+        }
+    }
+    else if (input == "echo $?")
+    {
+        cout << lastExitStatus << endl;
+    }
+    else
+    {
+        lastCommand = input;
+        bool isBackground = false;
+        string command = input; // Make a copy of input
+        if (!command.empty() && command.back() == '&')
+        {
+            isBackground = true;
+            command.pop_back(); // Remove the '&' character from the copy
+        }
+        
+        // Check for input and output redirection
+        string inputFile, outputFile;
+        size_t inputRedirectPos = command.find('<');
+        size_t outputRedirectPos = command.find('>');
+        if (inputRedirectPos != string::npos) {
+            inputFile = command.substr(inputRedirectPos + 1);
+            command.erase(inputRedirectPos); // Remove the '<' and the input file from the command
+        }
+        if (outputRedirectPos != string::npos) {
+            outputFile = command.substr(outputRedirectPos + 1);
+            command.erase(outputRedirectPos); // Remove the '>' and the output file from the command
+        }
+        
+        pid_t pid = fork();
+        if (pid == -1)
+        {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0)
+        {
+            // Input redirection
+            if (!inputFile.empty()) {
+                int fd = open(inputFile.c_str(), O_RDONLY);
+                if (fd == -1) {
+                    perror("Failed to open input file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+            
+            // Output redirection
+            if (!outputFile.empty()) {
+                int fd = open(outputFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd == -1) {
+                    perror("Failed to open output file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+            
+            istringstream iss(command);
+            vector<string> tokens;
+            string token;
+
+            while (iss >> token)
+            {
+                tokens.push_back(token);
+            }
+
+            vector<char *> args(tokens.size() + 1);
+            for (size_t i = 0; i < tokens.size(); ++i)
+            {
+                args[i] = const_cast<char *>(tokens[i].c_str());
+            }
+            args[tokens.size()] = nullptr;
+
+            execvp(args[0], args.data());
+
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            if (isBackground)
+            {
+                cout << "[" << ++jobCount << "] " << pid << endl;
+                backgroundProcesses.push_back({jobCount, pid, command, true});
+            }
+            else
+            {
+                foregroundProcessGroup = pid;
+                int status;
+                waitpid(pid, &status, WUNTRACED); // Wait for the child process to finish or be stopped
+                lastExitStatus = WIFEXITED(status) ? WEXITSTATUS(status) : 0; // Save the exit status of the command
+                if (WIFSTOPPED(status))             // If child process is stopped
+                {
+                    cout << "Foreground job stopped." << endl;
+                }
+                foregroundProcessGroup = -1;
+            }
+        }
+    }
+}
+
+void handleCtrlC(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Killing current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGINT);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleCtrlZ(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Suspending current foreground job." << endl;
+        kill(-foregroundProcessGroup, SIGTSTP);
+    }
+    else
+    {
+        cout << "No foreground job running." << endl;
+    }
+}
+
+void handleBackgroundProcessTermination(int signal)
+{
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(status))
+        {
+            for (auto &process : backgroundProcesses)
+            {
+                if (process.pid == pid)
+                {
+                    process.running = false;
+                    cout << "[" << process.jobID << "]  Done\t\t\t" << process.command << endl;
+                    break;
+                }
+            }
+        }
+
+        if (pid == foregroundProcessGroup) {
+            lastExitStatus = WIFEXITED(status) ? WEXITSTATUS(status) : 0;
+            foregroundProcessGroup = -1;
+        }
+    }
+}
+
+void bringToForeground(int jobID)
+{
+    for (auto &process : backgroundProcesses)
+    {
+        if (process.jobID == jobID)
+        {
+            cout << process.command << endl;
+            process.running = true;
+            foregroundProcessGroup = process.pid;
+            waitpid(process.pid, nullptr, 0); // Wait for the process to finish or be stopped
+            foregroundProcessGroup = -1;
+            break;
+        }
+    }
+}
+
+--------------------------------------------------
+
+
+/* ICCS227: Project 1: icsh
+ * Name: Alexander Ogay
+ * StudentID: 6380727
+ */
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <signal.h>
+
+using namespace std;
+
+struct BackgroundProcess {
+    int jobID;
+    pid_t pid;
+    string command;
+    bool running;
+};
+
+string input;
+pid_t foregroundProcessGroup = -1;
+vector<BackgroundProcess> backgroundProcesses;
+int lastExitStatus = 0; 
+
+void mainLoop(const string &input);
+void handleCtrlC(int signal);
+void handleCtrlZ(int signal);
+void handleBackgroundProcessTermination(int signal);
+void bringToForeground(int jobID);
+
+int main(int argc, char *argv[])
+{
+
+    signal(SIGINT, handleCtrlC);
+    signal(SIGTSTP, handleCtrlZ);
+    signal(SIGCHLD, handleBackgroundProcessTermination);
+
+    if (argc <= 1)
+    {
+        while (1)
+        {
+            cout << "icsh $ ";
+            getline(cin, input);
+
+            if (input.empty())
+            {
+                continue;
+            }
+
+            mainLoop(input);
+        }
+    }
+
+    else
+    {
+        ifstream inputFile(argv[1]);
+        if (!inputFile)
+        {
+            cerr << "Unable to open input file " << argv[1] << endl;
+            return 1;
+        }
+        string line;
+        while (getline(inputFile, line))
+        {
+            if (line.find("#!/bin/bash") == 0 || line.empty())
+            {
+                continue;
+            }
+            mainLoop(line);
+        }
+    }
+    return 0;
+}
+
+void mainLoop(const string &input)
+{
+    static string lastCommand;
+    static int jobCount = 0;
+
+    if (strncmp(input.c_str(), "exit", 4) == 0)
+    {
+        int exitCode = atoi(input.substr(4).c_str());
+        cout << exitCode << endl;
+        exit(exitCode);
+    }
+    else if (input == "!!")
+    {
+        if (!lastCommand.empty())
+        {
+            cout << lastCommand << endl;
+            mainLoop(lastCommand);
+        }
+        
+        return;
+    }
+    else if (input == "jobs")
+    {
+        for (const auto &process : backgroundProcesses)
+        {
+            string status = process.running ? "Running" : "Done";
+            cout << "[" << process.jobID << "]" << (process.running ? "-" : "+") << "  " << status << "\t\t\t" << process.command << endl;
+        }
+    }
+    else if (input.find("fg %") == 0)
+    {
+        int jobID = stoi(input.substr(4));
+        bringToForeground(jobID);
+    }
+    else if (input.find("bg %") == 0)
+    {
+        int jobID = stoi(input.substr(4));
+        for (auto &process : backgroundProcesses)
+        {
+            if (process.jobID == jobID && !process.running) 
+            {
+                kill(process.pid, SIGCONT);
+                process.running = true;
+                cout << "[" << process.jobID << "] " << process.command << " &" << endl;
+                break;
+            }
+        }
+    }
+    else if (input == "echo $?")
+    {
+        cout << lastExitStatus << endl;
+    }
+    else
+    {
+        lastCommand = input;
+        bool isBackground = false;
+        string command = input; 
+        if (!command.empty() && command.back() == '&')
+        {
+            isBackground = true;
+            command.pop_back(); 
+        }
+        
+        string inputFile, outputFile;
+        size_t inputRedirectPos = command.find('<');
+        size_t outputRedirectPos = command.find('>');
+        if (inputRedirectPos != string::npos) {
+            inputFile = command.substr(inputRedirectPos + 1);
+            command.erase(inputRedirectPos); 
+        }
+        if (outputRedirectPos != string::npos) {
+            outputFile = command.substr(outputRedirectPos + 1);
+            command.erase(outputRedirectPos); 
+        }
+        
+        pid_t pid = fork();
+        if (pid == -1)
+        {
+            perror("Fork failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0)
+        {
+            if (!inputFile.empty()) {
+                int fd = open(inputFile.c_str(), O_RDONLY);
+                if (fd == -1) {
+                    perror("Failed to open input file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+            
+            if (!outputFile.empty()) {
+                int fd = open(outputFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd == -1) {
+                    perror("Failed to open output file");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+            
+            istringstream iss(command);
+            vector<string> tokens;
+            string token;
+
+            while (iss >> token)
+            {
+                tokens.push_back(token);
+            }
+
+            vector<char *> args(tokens.size() + 1);
+            for (size_t i = 0; i < tokens.size(); ++i)
+            {
+                args[i] = const_cast<char *>(tokens[i].c_str());
+            }
+            args[tokens.size()] = nullptr;
+
+            execvp(args[0], args.data());
+
+            perror("Bad Command");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            if (isBackground)
+            {
+                cout << "[" << ++jobCount << "] " << pid << endl;
+                backgroundProcesses.push_back({jobCount, pid, command, true});
+            }
+            else
+            {
+                foregroundProcessGroup = pid;
+                int status;
+                waitpid(pid, &status, WUNTRACED); 
+                lastExitStatus = WIFEXITED(status) ? WEXITSTATUS(status) : 0; 
+                if (WIFSTOPPED(status))          
+                {
+                    cout << "Process Suspended" << endl;
+                }
+                foregroundProcessGroup = -1;
+            }
+        }
+    }
+}
+
+void handleCtrlC(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Killing Current Process" << endl;
+        kill(-foregroundProcessGroup, SIGINT);
+    }
+    else
+    {
+        cout << "No Current Process" << endl;
+    }
+}
+
+void handleCtrlZ(int signal)
+{
+    if (foregroundProcessGroup != -1)
+    {
+        cout << "Process Suspended" << endl;
+        kill(-foregroundProcessGroup, SIGTSTP);
+    }
+    else
+    {
+        cout << "No Current Process." << endl;
+    }
+}
+
+void handleBackgroundProcessTermination(int signal)
+{
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(status))
+        {
+            for (auto &process : backgroundProcesses)
+            {
+                if (process.pid == pid)
+                {
+                    process.running = false;
+                    cout << "[" << process.jobID << "]  Done\t\t\t" << process.command << endl;
+                    break;
+                }
+            }
+        }
+
+        if (pid == foregroundProcessGroup) {
+            lastExitStatus = WIFEXITED(status) ? WEXITSTATUS(status) : 0;
+            foregroundProcessGroup = -1;
+        }
+    }
+}
+
+void bringToForeground(int jobID)
+{
+    for (auto &process : backgroundProcesses)
+    {
+        if (process.jobID == jobID)
+        {
+            cout << process.command << endl;
+            process.running = true;
+            foregroundProcessGroup = process.pid;
+            waitpid(process.pid, nullptr, 0); 
+            foregroundProcessGroup = -1;
+            break;
+        }
+    }
+}
+
+
+
