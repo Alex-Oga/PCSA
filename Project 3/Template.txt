@@ -1,0 +1,132 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include "shell.h"
+
+void process_instruction() {
+    /* Fetch the instruction from memory */
+    uint32_t instruction = mem_read_32(CURRENT_STATE.PC);
+
+    /* Extract the opcode and other fields */
+    uint32_t opcode31_26 = (instruction >> 26) & 0x3F;
+    uint32_t opcode20_16 = (instruction >> 16) & 0x1F;
+    uint32_t opcode5_0 = instruction & 0x3F;
+    uint32_t v0 = CURRENT_STATE.REGS[2];
+    uint32_t rs = (instruction >> 21) & 0x1F;
+    uint32_t rt = (instruction >> 16) & 0x1F;
+    int32_t imm = (int16_t)(instruction & 0xFFFF); // Sign-extend immediate value
+
+    /* Increment the program counter */
+    NEXT_STATE.PC += 4;
+
+    /* Decode and execute the instruction */
+    switch(opcode31_26) { // Opcode from 31 to 26 bits
+        case 0x02: // J
+        break;
+        case 0x03: // JAL
+        break;
+        case 0x05: // BNE
+        break;
+        case 0x06: // BLEZ
+        break;
+        case 0x07: // BGTZ
+        break;
+        case 0x08: // ADDI
+        break;
+        case 0x09: // ADDIU
+        break;
+        case 0x10: // BEQ
+        break;
+        case 0x0A: // SLTI
+        break;
+        case 0x0B: // SLTIU
+        break;
+        case 0x0C: // ANDI
+        break;
+        case 0x0D: // ORI
+        break;
+        case 0x0E: // XORI
+        break;
+        case 0x0F: // LUI
+        break;
+        case 0x20: // LB
+        break;
+        case 0x21: // LH
+        break;
+        case 0x23: // LW
+        break;
+        case 0x24: // LBU
+        break;
+        case 0x25: // LHU
+        break;
+        case 0x28: // SB
+        break;
+        case 0x29: // SH
+        break;
+        case 0x2B: // SW
+        break;
+    }
+    switch(opcode20_16) { // Opcode from 20 to 16 bits
+        case 0x00: // BLTZ
+        break;
+        case 0x01: // BGEZ
+        break;
+        case 0x10: // BLTZAL
+        break;
+        case 0x11: // BGEZAL
+        break;
+    }
+    switch(opcode5_0) { // Opcode from 5 to 0 bits
+        case 0x00: // SLL
+        break;
+        case 0x02: // SRL
+        break;
+        case 0x03: // SRA
+        break;
+        case 0x04: // SLLV
+        break;
+        case 0x06: // SRLV
+        break;
+        case 0x07: // SRAV
+        break;
+        case 0x08: // JR
+        break;
+        case 0x09: // JALR
+        break;
+        case 0X10: // MFHI
+        break;
+        case 0x11: // MTHI
+        break;
+        case 0x12: // MFLO
+        break;
+        case 0x13: // MTLO
+        break;
+        case 0x18: // MULT
+        break;
+        case 0x19: // MULTU
+        break;
+        case 0x20: // ADD
+        break;
+        case 0x21: // ADDU
+        break;
+        case 0x22: // SUB
+        break;
+        case 0x23: // SUBU
+        break;
+        case 0x24: // AND
+        break;
+        case 0x25: // OR
+        break;
+        case 0x26: // XOR
+        break;
+        case 0x27: // NOR
+        break;
+        case 0x1A: // DIV
+        break;
+        case 0x1B: // DIVU
+        break;
+        case 0x2A: // SLT
+        break;
+        case 0x2B: // SLTU
+        break;
+    }
+}
